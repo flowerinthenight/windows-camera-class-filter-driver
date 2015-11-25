@@ -5,3 +5,4 @@ Camera class filter driver for Windows.
 ```
 inf2cat /driver:<package_path> /os:<arch>
 ```
+[](https://msdn.microsoft.com/en-us/library/windows/hardware/ff547089(v=vs.85).aspx)
