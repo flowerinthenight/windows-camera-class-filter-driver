@@ -1,0 +1,67 @@
+;
+; ccfltr.inf
+;
+
+[Version]
+Signature = "$WINDOWS NT$"
+Class = Image
+ClassGuid = {6BDD1FC6-810F-11D0-BEC7-08002BE2092F} 
+Provider = %ccfltr.Provider%
+DriverVer = 10/21/2015, 1.0.0.1
+CatalogFile = ccfltr.cat
+
+[DestinationDirs]
+upperfilter_copyfiles = 12,,
+
+[SourceDisksNames]
+1 = %ccfltr.MediaDesc%,,,""
+
+[SourceDisksFiles]
+ccfltr.sys = 1,,
+
+[DefaultInstall]
+CopyFiles = upperfilter_copyfiles
+AddReg = upperfilter_addreg
+
+[upperfilter_copyfiles]
+ccfltr.sys
+
+[upperfilter_addreg]
+; append this service to existing REG_MULTI_SZ list, if any
+HKLM,SYSTEM\CurrentControlSet\Control\Class\{6BDD1FC6-810F-11D0-BEC7-08002BE2092F},UpperFilters,0x00010008,ccfltr
+
+[DefaultInstall.Services]
+AddService = ccfltr,,upperfilter_service, clasfilt_EventLog_Inst
+
+[upperfilter_service]
+DisplayName   = %ccfltr.SvcDesc%
+ServiceType   = 1   ; SERVICE_KERNEL_DRIVER
+StartType     = 3   ; SERVICE_DEMAND_START
+ErrorControl  = 1   ; SERVICE_ERROR_NORMAL
+ServiceBinary = %12%\ccfltr.sys
+LoadOrderGroup = "filter"
+
+[clasfilt_EventLog_Inst]
+AddReg = clasfilt_EventLog_AddReg
+
+[clasfilt_EventLog_AddReg]
+; Change clasfilt.sys to the name of your driver file.
+; HKR,,EventMessageFile,%REG_EXPAND_SZ%,"%%SystemRoot%%\System32\IoLogMsg.dll;%%SystemRoot%%\System32\drivers\ccfltr.sys"
+; HKR,,TypesSupported,%REG_DWORD%,7
+
+[Uninstall]
+DelReg = ccfltr_DelReg
+DelFiles = upperfilter_copyfiles
+
+[Uninstall.Services]
+DelService = ccfltr,,
+
+[ccfltr_DelReg]
+HKLM, SYSTEM\CurrentControlSet\Control\Class\{6BDD1FC6-810F-11D0-BEC7-08002BE2092F},UpperFilters,0x00018002,ccfltr
+
+[Strings]
+ccfltr.Provider = "Chew Esmero"
+ccfltr.MediaDesc = "Chew Camera Filter Driver Disc"
+ccfltr.SvcDesc = "Chew Camera Filter Driver"
+REG_EXPAND_SZ = 0x00020000
+REG_DWORD = 0x00010001
