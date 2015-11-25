@@ -2,11 +2,13 @@
 Camera class filter driver for Windows.
 
 # Driver setup:
-Use the ccfltr-console tool to install the driver. Copy the tool to the directory of the .sys and .inf file and run on an elevated command prompt.
+Use the ccfltr-console tool to install/uninstall the driver. Copy the tool to the directory of the .sys and .inf file.
+
 ### Installation:
 ```
 ccfltr-console.exe /install
 ```
+
 ### Uninstallation:
 ```
 ccfltr-console.exe /uninstall
