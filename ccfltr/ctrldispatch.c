@@ -57,7 +57,7 @@ NTSTATUS ControlDispatchIoTestDirect(__in PDEVICE_OBJECT DeviceObject, __in PIRP
 
     Irp->IoStatus.Information = pIrpStack->Parameters.DeviceIoControl.OutputBufferLength;
 
-	/* Changes made to the SystemBuffer are not copied to the user input buffer by the I/O manager. */
+    /* Changes made to the SystemBuffer are not copied to the user input buffer by the I/O manager. */
 #endif
 
     return ntStatus;
