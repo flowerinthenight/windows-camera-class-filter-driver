@@ -6,16 +6,16 @@
 #include "ccfltr.h"
 
 #ifdef ALLOC_PRAGMA
-#pragma alloc_text(INIT, DriverEntry)						/* driver entry point function */
-#pragma alloc_text(PAGE, FilterAddDevice)					/* main device object creation function */
-#pragma alloc_text(PAGE, FilterDispatchPnp)					/* pnp related IO dispatcher function */
-#pragma alloc_text(PAGE, FilterUnload)						/* unload function */
+#pragma alloc_text(INIT, DriverEntry)                       /* driver entry point function */
+#pragma alloc_text(PAGE, FilterAddDevice)                   /* main device object creation function */
+#pragma alloc_text(PAGE, FilterDispatchPnp)                 /* pnp related IO dispatcher function */
+#pragma alloc_text(PAGE, FilterUnload)                      /* unload function */
 #endif
 
 #ifdef ALLOC_PRAGMA
-#pragma alloc_text(PAGE, FilterCreateControlObject)			/* sideband creation function */
-#pragma alloc_text(PAGE, FilterDeleteControlObject)			/* sideband removal function */
-#pragma alloc_text(PAGE, FilterDispatchIo)					/* intermediate dispatch funtion */
+#pragma alloc_text(PAGE, FilterCreateControlObject)         /* sideband creation function */
+#pragma alloc_text(PAGE, FilterDeleteControlObject)         /* sideband removal function */
+#pragma alloc_text(PAGE, FilterDispatchIo)                  /* intermediate dispatch funtion */
 #endif
 
 #define TEST_MJPG_REPLACE 0
@@ -46,24 +46,19 @@ NTSTATUS DriverEntry(__in PDRIVER_OBJECT DriverObject, __in PUNICODE_STRING Regi
 
     L("[%s] Built %s %s\n", FN, __DATE__, __TIME__);
 
-    /*
-     * Create dispatch points.
-     */
+    /* Create dispatch points. */
     for (ulIndex = (ULONG)0, pfnDriverDispatch = DriverObject->MajorFunction;
         ulIndex <= IRP_MJ_MAXIMUM_FUNCTION;
-        ulIndex++, pfnDriverDispatch++)
-    {
+        ulIndex++, pfnDriverDispatch++) {
         *pfnDriverDispatch = FilterPass;
-	}
+    }
 
     DriverObject->MajorFunction[IRP_MJ_PNP] = FilterDispatchPnp;
     DriverObject->MajorFunction[IRP_MJ_POWER] = FilterDispatchPower;
     DriverObject->DriverExtension->AddDevice = FilterAddDevice;
     DriverObject->DriverUnload = FilterUnload;
 
-    /*
-     * Set the following dispatch points as we will be doing something useful to these requests instead of just passing them down. 
-     */
+    /* Set the following dispatch points as we will be doing something useful to these requests instead of just passing them down. */
     DriverObject->MajorFunction[IRP_MJ_CREATE] = 
         DriverObject->MajorFunction[IRP_MJ_CLOSE] = 
         DriverObject->MajorFunction[IRP_MJ_CLEANUP] = 
@@ -98,11 +93,8 @@ NTSTATUS FilterAddDevice(__in PDRIVER_OBJECT DriverObject, __in PDEVICE_OBJECT P
 
     PAGED_CODE();
 
-    /*
-     * IoIsWdmVersionAvailable(1, 0x20) returns TRUE on os after Windows 2000.
-     */
-    if (RtlIsNtDdiVersionAvailable(NTDDI_WINXP))
-    {
+    /* IoIsWdmVersionAvailable(1, 0x20) returns TRUE on os after Windows 2000. */
+    if (RtlIsNtDdiVersionAvailable(NTDDI_WINXP)) {
         /*
          * Win2K system bugchecks if the filter attached to a storage device doesn't specify the same DeviceType as the device it's
          * attaching to. This bugcheck happens in the filesystem when you disable the devicestack whose top level deviceobject
@@ -113,9 +105,7 @@ NTSTATUS FilterAddDevice(__in PDRIVER_OBJECT DriverObject, __in PDEVICE_OBJECT P
         ObDereferenceObject(pDeviceObject);
     }
 
-    /*
-     * Create a filter device object.
-     */
+    /* Create a filter device object. */
     ntStatus = IoCreateDevice(DriverObject,
                               sizeof(DEVICE_EXTENSION),
                               NULL,
@@ -124,8 +114,7 @@ NTSTATUS FilterAddDevice(__in PDRIVER_OBJECT DriverObject, __in PDEVICE_OBJECT P
                               FALSE,
                               &pDeviceObject);
 
-	if (!NT_SUCCESS(ntStatus))
-    {
+    if (!NT_SUCCESS(ntStatus)) {
         /*
          * Returning failure here prevents the entire stack from functioning, but most likely the rest of the stack will not be
          * able to create device objects either, so it is still OK.
@@ -141,11 +130,8 @@ NTSTATUS FilterAddDevice(__in PDRIVER_OBJECT DriverObject, __in PDEVICE_OBJECT P
 
     L("[%s] AddDevice DeviceExtension: 0x%p\n", FN, pDeviceExtension);
 
-    /*
-     * Failure for attachment is an indication of a broken plug & play system.
-     */
-    if (pDeviceExtension->NextLowerDriver == NULL)
-    {
+    /* Failure for attachment is an indication of a broken plug & play system. */
+    if (pDeviceExtension->NextLowerDriver == NULL) {
         IoDeleteDevice(pDeviceObject);
         return STATUS_UNSUCCESSFUL;
     }
@@ -175,41 +161,32 @@ NTSTATUS FilterAddDevice(__in PDRIVER_OBJECT DriverObject, __in PDEVICE_OBJECT P
 
     KeInitializeEvent(&pDeviceExtension->ControlLock, SynchronizationEvent, TRUE);
 
-    /*
-     * Get our PDO friendly name and check whether we support it at this time or not.
-     */
+    /* Get our PDO friendly name and check whether we support it at this time or not. */
     ntStatus = IoGetDeviceProperty(PhysicalDeviceObject,
                                    DevicePropertyFriendlyName,
                                    512 * sizeof(WCHAR),
                                    szTmpInfo,
                                    (PULONG)&cbTmpInfoSize);
 
-    if (NT_SUCCESS(ntStatus))
-    {
-        if (_wcsicmp(szTmpInfo, L"Integrated Camera") == 0)
-        {
+    if (NT_SUCCESS(ntStatus)) {
+        if (_wcsicmp(szTmpInfo, L"Integrated Camera") == 0) {
             bPdoSupported = TRUE;
         }
-    }
-    else
-    {
+    } else {
         ntStatus = IoGetDeviceProperty(PhysicalDeviceObject,
                                        DevicePropertyDeviceDescription,
                                        512 * sizeof(WCHAR),
                                        szTmpInfo,
                                        (PULONG)&cbTmpInfoSize);
 
-        if (NT_SUCCESS(ntStatus))
-        {
-            if (_wcsicmp(szTmpInfo, L"Intel(R) Imaging Signal Processor 2400") == 0)
-            {
+        if (NT_SUCCESS(ntStatus)) {
+            if (_wcsicmp(szTmpInfo, L"Intel(R) Imaging Signal Processor 2400") == 0) {
                 bPdoSupported = TRUE;
             }
         }
     }
 
-    if (bPdoSupported)
-    {
+    if (bPdoSupported) {
         L("[%s] 0x%p PDO supported.\n", FN, PhysicalDeviceObject);
         InterlockedIncrement(&pDeviceExtension->IsPdoSupported);
 
@@ -217,15 +194,11 @@ NTSTATUS FilterAddDevice(__in PDRIVER_OBJECT DriverObject, __in PDEVICE_OBJECT P
         pDeviceExtension->StreamBuffer = (LPBYTE)ExAllocatePoolWithTag(NonPagedPool, cbSize, 'UVCF');
         L("[%s] Intermediate streambuffer allocated (%d).\n", FN, cbSize);
 
-        /*
-         * Initialize system thread control events.
-         */
+        /* Initialize system thread control events. */
         KeInitializeEvent(&pDeviceExtension->EventCtrl, NotificationEvent, FALSE);
         KeInitializeEvent(&pDeviceExtension->EventTerm, NotificationEvent, FALSE);
 
-        /*
-         * Start our 'restreamer' system thread.
-         */
+        /* Start our 'restreamer' system thread. */
         ntStatus = PsCreateSystemThread(&hThreadTemp,
                                         THREAD_ALL_ACCESS,
                                         NULL,
@@ -234,12 +207,9 @@ NTSTATUS FilterAddDevice(__in PDRIVER_OBJECT DriverObject, __in PDEVICE_OBJECT P
                                         (PKSTART_ROUTINE)StreamMonitorSystemThread,
                                         pDeviceExtension);
 
-        if (!NT_SUCCESS(ntStatus))
-        {
+        if (!NT_SUCCESS(ntStatus)) {
             L("[%s] PsCreateSystemThread error 0x%x\n", FN, ntStatus);
-        }
-        else
-        {
+        } else {
             ObReferenceObjectByHandle(hThreadTemp,
                                       THREAD_ALL_ACCESS,
                                       NULL,
@@ -250,15 +220,11 @@ NTSTATUS FilterAddDevice(__in PDRIVER_OBJECT DriverObject, __in PDEVICE_OBJECT P
             ZwClose(hThreadTemp);
             L("[%s] System thread 0x%p created.\n", FN, pDeviceExtension->ThreadRestream);
         }
-    }
-    else
-    {
+    } else {
         L("[%s] 0x%p PDO not supported at this time.\n", FN, PhysicalDeviceObject);
     }
     
-    /*
-     * Set the initial state of the Filter DO
-     */
+    /* Set the initial state of the Filter DO */
     INITIALIZE_PNP_STATE(pDeviceExtension);
 
     L("[%s] 0x%p to 0x%p->0x%p\n", FN, pDeviceObject, pDeviceExtension->NextLowerDriver, PhysicalDeviceObject);
@@ -266,9 +232,7 @@ NTSTATUS FilterAddDevice(__in PDRIVER_OBJECT DriverObject, __in PDEVICE_OBJECT P
     return STATUS_SUCCESS;
 }
 
-/*
- * {8348FB22-127C-4dc6-9295-65AE0A4109BB}
- */
+/* {8348FB22-127C-4dc6-9295-65AE0A4109BB} */
 DEFINE_GUID(METHODSETID_SETIMAGE, 0x8348fb22, 0x127c, 0x4dc6, 0x92, 0x95, 0x65, 0xae, 0xa, 0x41, 0x9, 0xbb);
 
 /*
@@ -371,195 +335,173 @@ NTSTATUS KsGetImage(IN PIRP pIrp, IN PKSMETHOD pKSMethod, IN PVOID pData)
 }
 */
 
-/*
- * Kernel stream monitor system thread. Updates registry if stream is active.
- */
+/* Kernel stream monitor system thread. Updates registry if stream is active. */
 VOID StreamMonitorSystemThread(PDEVICE_EXTENSION DeviceExtension)
 {
-	NTSTATUS ntStatus = STATUS_SUCCESS;
-	PVOID pEventArray[EVENT_COUNT];
-	BOOL bContinue = TRUE;
-	ULONG ulValue = (ULONG)0;
+    NTSTATUS ntStatus = STATUS_SUCCESS;
+    PVOID pEventArray[EVENT_COUNT];
+    BOOL bContinue = TRUE;
+    ULONG ulValue = (ULONG)0;
 
-	L("[%s] --> Start -->\n", FN);
+    L("[%s] --> Start -->\n", FN);
 
-	pEventArray[EVENT_CTRL] = &DeviceExtension->EventCtrl;
-	pEventArray[EVENT_EXIT] = &DeviceExtension->EventTerm;
+    pEventArray[EVENT_CTRL] = &DeviceExtension->EventCtrl;
+    pEventArray[EVENT_EXIT] = &DeviceExtension->EventTerm;
 
-	while (bContinue == TRUE)
-	{
-		ntStatus = KeWaitForMultipleObjects(EVENT_COUNT,
-											pEventArray,
-											WaitAny,
-											Executive,
-											KernelMode,
-											FALSE,
-											NULL,
-											NULL);
+    while (bContinue == TRUE) {
+        ntStatus = KeWaitForMultipleObjects(EVENT_COUNT,
+                                            pEventArray,
+                                            WaitAny,
+                                            Executive,
+                                            KernelMode,
+                                            FALSE,
+                                            NULL,
+                                            NULL);
+        switch (ntStatus) {
+            case STATUS_WAIT_0:
+                ulValue = (ULONG)InterlockedCompareExchange(&DeviceExtension->KsStateRun, MAXLONG, MAXLONG);
 
-		switch (ntStatus)
-		{
-			case STATUS_WAIT_0:
-				ulValue = (ULONG)InterlockedCompareExchange(&DeviceExtension->KsStateRun, MAXLONG, MAXLONG);
+                L("[%s] KsStateRun = %d\n", FN, ulValue);
 
-				L("[%s] KsStateRun = %d\n", FN, ulValue);
-
-				ntStatus = RtlWriteRegistryValue(RTL_REGISTRY_ABSOLUTE,
-												 KEY_KSSTATE_RUN,
-												 L"State",
-												 REG_DWORD,
-												 &ulValue,
-												 sizeof(ULONG));
-
-				KeClearEvent(&DeviceExtension->EventCtrl);
-				break;
-
-			case STATUS_WAIT_1:
-				L("[%s] Requested to terminate!\n", FN);
-				bContinue = FALSE;
-				break;
-
-			default:
-				L("[%s] KeWaitForMultipleObjects error 0x%x\n", FN, ntStatus);
-				break;
-		}
-	}
-
-	L("[%s] <-- End <--\n", FN);
-
-	PsTerminateSystemThread(STATUS_SUCCESS);
+                ntStatus = RtlWriteRegistryValue(RTL_REGISTRY_ABSOLUTE,
+                                                 KEY_KSSTATE_RUN,
+                                                 L"State",
+                                                 REG_DWORD,
+                                                 &ulValue,
+                                                 sizeof(ULONG));
+                
+                KeClearEvent(&DeviceExtension->EventCtrl);
+                break;
+            
+            case STATUS_WAIT_1:
+                L("[%s] Requested to terminate!\n", FN);
+                bContinue = FALSE;
+                break;
+            
+            default:
+                L("[%s] KeWaitForMultipleObjects error 0x%x\n", FN, ntStatus);
+                break;
+        }
+    }
+    
+    L("[%s] <-- End <--\n", FN);
+    
+    PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
 DWORD m = 0;
 
-/*
- * Our completion routine for video streaming.
- */
+/* Our completion routine for video streaming. */
 NTSTATUS ModifyStreamRead(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, PVOID Context)
 {
-	PDEVICE_EXTENSION pDeviceExtension;
-	PIO_STACK_LOCATION pIrpStack;
-	PKSSTREAM_HEADER pStreamHdr = NULL;
-	PKS_FRAME_INFO pFrameInfo = NULL;
-	PUCHAR pMdlBufferOut;
-	LPBYTE lpStreamBuffer;
-	ULONG ulWidth;
-	ULONG ulHeight;
-	ULONG ulBufferSize;
-	PGUID pSubtypeGuid = NULL;
-	BOOL bCriteria1 = FALSE;
-	BOOL bCriteria2 = FALSE;
-	BOOL bCriteria3 = FALSE;
-	// ULONG itr = (ULONG)0;
-	ULONG line = (ULONG)1;
+    PDEVICE_EXTENSION pDeviceExtension;
+    PIO_STACK_LOCATION pIrpStack;
+    PKSSTREAM_HEADER pStreamHdr = NULL;
+    PKS_FRAME_INFO pFrameInfo = NULL;
+    PUCHAR pMdlBufferOut;
+    LPBYTE lpStreamBuffer;
+    ULONG ulWidth;
+    ULONG ulHeight;
+    ULONG ulBufferSize;
+    PGUID pSubtypeGuid = NULL;
+    BOOL bCriteria1 = FALSE;
+    BOOL bCriteria2 = FALSE;
+    BOOL bCriteria3 = FALSE;
+    // ULONG itr = (ULONG)0;
+    ULONG line = (ULONG)1;
 
-	UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(DeviceObject);
+    
+    if (Irp->PendingReturned) {
+        IoMarkIrpPending(Irp);
+    }
 
-	if (Irp->PendingReturned)
-	{
-		IoMarkIrpPending(Irp);
-	}
+    m += 1;
+    
+    pDeviceExtension = (PDEVICE_EXTENSION)Context;
+    pIrpStack = IoGetCurrentIrpStackLocation(Irp);
+    
+    if (InterlockedCompareExchange(&pDeviceExtension->IsVideoInfoHeader2, MAXLONG, MAXLONG) > 0) {
+        ulWidth = (ULONG)pDeviceExtension->VideoInfoHeader2.VideoInfoHeader2.bmiHeader.biWidth;
+        ulHeight = (ULONG)pDeviceExtension->VideoInfoHeader2.VideoInfoHeader2.bmiHeader.biHeight;
+        ulBufferSize = (ULONG)pDeviceExtension->VideoInfoHeader2.DataFormat.SampleSize;
+        pSubtypeGuid = &pDeviceExtension->VideoInfoHeader2.DataFormat.SubFormat;
+    } else {
+        ulWidth = (ULONG)pDeviceExtension->VideoInfoHeader.VideoInfoHeader.bmiHeader.biWidth;
+        ulHeight = (ULONG)pDeviceExtension->VideoInfoHeader.VideoInfoHeader.bmiHeader.biHeight;
+        ulBufferSize = (ULONG)pDeviceExtension->VideoInfoHeader.DataFormat.SampleSize;
+        pSubtypeGuid = &pDeviceExtension->VideoInfoHeader.DataFormat.SubFormat;
+    }
 
-	m += 1;
+    lpStreamBuffer = (LPBYTE)pDeviceExtension->StreamBuffer;
+    
+    bCriteria1 = Irp->MdlAddress && IsEqualGUID(pSubtypeGuid, &GUID_FormatSubtype_YUY2);
+    bCriteria2 = Irp->MdlAddress && IsEqualGUID(pSubtypeGuid, &GUID_FormatSubtype_NV12);
+    bCriteria3 = Irp->MdlAddress && IsEqualGUID(pSubtypeGuid, &GUID_FormatSubtype_MJPG);
 
-	pDeviceExtension = (PDEVICE_EXTENSION)Context;
-	pIrpStack = IoGetCurrentIrpStackLocation(Irp);
-
-	if (InterlockedCompareExchange(&pDeviceExtension->IsVideoInfoHeader2, MAXLONG, MAXLONG) > 0)
-	{
-		ulWidth = (ULONG)pDeviceExtension->VideoInfoHeader2.VideoInfoHeader2.bmiHeader.biWidth;
-		ulHeight = (ULONG)pDeviceExtension->VideoInfoHeader2.VideoInfoHeader2.bmiHeader.biHeight;
-		ulBufferSize = (ULONG)pDeviceExtension->VideoInfoHeader2.DataFormat.SampleSize;
-		pSubtypeGuid = &pDeviceExtension->VideoInfoHeader2.DataFormat.SubFormat;
-	}
-	else
-	{
-		ulWidth = (ULONG)pDeviceExtension->VideoInfoHeader.VideoInfoHeader.bmiHeader.biWidth;
-		ulHeight = (ULONG)pDeviceExtension->VideoInfoHeader.VideoInfoHeader.bmiHeader.biHeight;
-		ulBufferSize = (ULONG)pDeviceExtension->VideoInfoHeader.DataFormat.SampleSize;
-		pSubtypeGuid = &pDeviceExtension->VideoInfoHeader.DataFormat.SubFormat;
-	}
-
-	lpStreamBuffer = (LPBYTE)pDeviceExtension->StreamBuffer;
-
-	bCriteria1 = Irp->MdlAddress && IsEqualGUID(pSubtypeGuid, &GUID_FormatSubtype_YUY2);
-	bCriteria2 = Irp->MdlAddress && IsEqualGUID(pSubtypeGuid, &GUID_FormatSubtype_NV12);
-	bCriteria3 = Irp->MdlAddress && IsEqualGUID(pSubtypeGuid, &GUID_FormatSubtype_MJPG);
-
-	if (bCriteria1 || bCriteria2 || bCriteria3)
-	{
-		pStreamHdr = (PKSSTREAM_HEADER)Irp->AssociatedIrp.SystemBuffer;
-		pFrameInfo = (PKS_FRAME_INFO)((PBYTE)pStreamHdr + sizeof(KSSTREAM_HEADER));
-		
-		pMdlBufferOut = (PUCHAR)MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority);
-
-		if (pStreamHdr && pFrameInfo && pMdlBufferOut)
-		{
-			if (m >= 30)
-			{
-				L("[%s] ___________________________\n", FN);
-				L("[%s] KeGetCurrentIrql --> %d\n", FN, KeGetCurrentIrql());
-				L("[%s] sizeof(KSSTREAM_HEADER): %d\n", FN, sizeof(KSSTREAM_HEADER));
-				L("[%s] sizeof(KS_FRAME_INFO): %d\n", FN, sizeof(KS_FRAME_INFO));
-				L("[%s] RequestorMode: %d\n", FN, Irp->RequestorMode);
-				L("[%s] ulWidth: %d\n", FN, ulWidth);
-				L("[%s] ulHeight: %d\n", FN, ulHeight);
-				L("[%s] ulBufferSize: %d\n", FN, ulBufferSize);
-				L("[%s] pMdlBufferOut: 0x%p\n", FN, pMdlBufferOut);
-				L("[%s] pStreamHdr: 0x%p\n", FN, pStreamHdr);
-				L("[%s]    Size: %d\n", FN, pStreamHdr->Size);
-				L("[%s]    FrameExtent: %d\n", FN, pStreamHdr->FrameExtent);
-				L("[%s]    DataUsed: %d\n", FN, pStreamHdr->DataUsed);
-				L("[%s]    Data: 0x%p\n", FN, pStreamHdr->Data);
-				L("[%s] pFrameInfo: 0x%p\n", FN, pFrameInfo);
-				L("[%s]    Size: %d\n", FN, pFrameInfo->ExtendedHeaderSize);
-				L("[%s]    Pitch: %d\n", FN, pFrameInfo->lSurfacePitch);
-				L("[%s]    PicNum: %lld\n", FN, pFrameInfo->PictureNumber);
-				L("[%s]    Drop: %lld\n", FN, pFrameInfo->DropCount);
-				L("[%s] IoStatus.Information: %d\n", FN, Irp->IoStatus.Information);
-				L("[%s] IoStatus.Status: 0x%x\n", FN, Irp->IoStatus.Status);
-			}
+    if (bCriteria1 || bCriteria2 || bCriteria3) {
+        pStreamHdr = (PKSSTREAM_HEADER)Irp->AssociatedIrp.SystemBuffer;
+        pFrameInfo = (PKS_FRAME_INFO)((PBYTE)pStreamHdr + sizeof(KSSTREAM_HEADER));
+        
+        pMdlBufferOut = (PUCHAR)MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority);
+        
+        if (pStreamHdr && pFrameInfo && pMdlBufferOut) {
+            if (m >= 30) {
+                L("[%s] ___________________________\n", FN);
+                L("[%s] KeGetCurrentIrql --> %d\n", FN, KeGetCurrentIrql());
+                L("[%s] sizeof(KSSTREAM_HEADER): %d\n", FN, sizeof(KSSTREAM_HEADER));
+                L("[%s] sizeof(KS_FRAME_INFO): %d\n", FN, sizeof(KS_FRAME_INFO));
+                L("[%s] RequestorMode: %d\n", FN, Irp->RequestorMode);
+                L("[%s] ulWidth: %d\n", FN, ulWidth);
+                L("[%s] ulHeight: %d\n", FN, ulHeight);
+                L("[%s] ulBufferSize: %d\n", FN, ulBufferSize);
+                L("[%s] pMdlBufferOut: 0x%p\n", FN, pMdlBufferOut);
+                L("[%s] pStreamHdr: 0x%p\n", FN, pStreamHdr);
+                L("[%s]    Size: %d\n", FN, pStreamHdr->Size);
+                L("[%s]    FrameExtent: %d\n", FN, pStreamHdr->FrameExtent);
+                L("[%s]    DataUsed: %d\n", FN, pStreamHdr->DataUsed);
+                L("[%s]    Data: 0x%p\n", FN, pStreamHdr->Data);
+                L("[%s] pFrameInfo: 0x%p\n", FN, pFrameInfo);
+                L("[%s]    Size: %d\n", FN, pFrameInfo->ExtendedHeaderSize);
+                L("[%s]    Pitch: %d\n", FN, pFrameInfo->lSurfacePitch);
+                L("[%s]    PicNum: %lld\n", FN, pFrameInfo->PictureNumber);
+                L("[%s]    Drop: %lld\n", FN, pFrameInfo->DropCount);
+                L("[%s] IoStatus.Information: %d\n", FN, Irp->IoStatus.Information);
+                L("[%s] IoStatus.Status: 0x%x\n", FN, Irp->IoStatus.Status);
+            }
 
 #if TEST_MJPG_REPLACE == 1
-			if (bCriteria3)
-			{
-				if (!pDeviceExtension->DataUsed)
-				{
-					pDeviceExtension->DataUsed = pStreamHdr->DataUsed;
-					RtlCopyMemory(lpStreamBuffer, pMdlBufferOut, pStreamHdr->DataUsed);
-					L("[%s] Local buffer replaced %d\n", FN, pDeviceExtension->DataUsed);
-				}
-				else
-				{
-					/*
-					if (pStreamHdr->DataUsed <= pDeviceExtension->DataUsed && Irp->IoStatus.Status == STATUS_SUCCESS)
+            if (bCriteria3) {
+                if (!pDeviceExtension->DataUsed) {
+                    pDeviceExtension->DataUsed = pStreamHdr->DataUsed;
+                    RtlCopyMemory(lpStreamBuffer, pMdlBufferOut, pStreamHdr->DataUsed);
+                    L("[%s] Local buffer replaced %d\n", FN, pDeviceExtension->DataUsed);
+                } else {
+                    /*
+                    if (pStreamHdr->DataUsed <= pDeviceExtension->DataUsed && Irp->IoStatus.Status == STATUS_SUCCESS)
 					{
 						RtlCopyMemory(pMdlBufferOut, lpStreamBuffer, pDeviceExtension->DataUsed);
 						pStreamHdr->DataUsed = pDeviceExtension->DataUsed;
 					}
 					*/
 
-					if (Irp->IoStatus.Status == STATUS_SUCCESS)
-					{
-						RtlCopyMemory(pMdlBufferOut, lpStreamBuffer, pDeviceExtension->DataUsed);
-						pStreamHdr->DataUsed = pDeviceExtension->DataUsed;
-					}
-				}
-			}
+                    if (Irp->IoStatus.Status == STATUS_SUCCESS) {
+                        RtlCopyMemory(pMdlBufferOut, lpStreamBuffer, pDeviceExtension->DataUsed);
+                        pStreamHdr->DataUsed = pDeviceExtension->DataUsed;
+                    }
+                }
+            }
 #else
-			try
-			{
-				if (Irp->RequestorMode == UserMode)
-				{
-					ProbeForRead(pStreamHdr->Data, pStreamHdr->DataUsed, sizeof(BYTE));
-				}
-
-				if (Irp->IoStatus.Status == STATUS_SUCCESS)
-				{
-					RtlCopyMemory(lpStreamBuffer, pMdlBufferOut, pStreamHdr->DataUsed);
-					pDeviceExtension->DataUsed = pStreamHdr->DataUsed;
-
-					line = (ULONG)1;
+			try {
+                if (Irp->RequestorMode == UserMode) {
+                    ProbeForRead(pStreamHdr->Data, pStreamHdr->DataUsed, sizeof(BYTE));
+                }
+                
+                if (Irp->IoStatus.Status == STATUS_SUCCESS) {
+                    RtlCopyMemory(lpStreamBuffer, pMdlBufferOut, pStreamHdr->DataUsed);
+                    pDeviceExtension->DataUsed = pStreamHdr->DataUsed;
+                    
+                    line = (ULONG)1;
 
 					/*
 					for (itr = (ULONG)0; itr < pStreamHdr->DataUsed; itr++)
@@ -577,34 +519,28 @@ NTSTATUS ModifyStreamRead(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, PVOID Con
 
 					KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "\n"));
 					*/
-				}
+                }
 
-				if (pStreamHdr->DataUsed != ulBufferSize)
-				{
-					if (InterlockedCompareExchange(&pDeviceExtension->IsVideoInfoHeader2, MAXLONG, MAXLONG) > 0)
-					{
-						pDeviceExtension->VideoInfoHeader2.DataFormat.SampleSize = pStreamHdr->DataUsed;
-					}
-					else
-					{
-						pDeviceExtension->VideoInfoHeader.DataFormat.SampleSize = pStreamHdr->DataUsed;
-					}
-				}
-			}
-			except (EXCEPTION_EXECUTE_HANDLER)
-			{
-				L("[%s] Exception in 0x%p read (0x%x)\n", FN, pMdlBufferOut, GetExceptionCode());
-			}
+                if (pStreamHdr->DataUsed != ulBufferSize) {
+                    if (InterlockedCompareExchange(&pDeviceExtension->IsVideoInfoHeader2, MAXLONG, MAXLONG) > 0) {
+                        pDeviceExtension->VideoInfoHeader2.DataFormat.SampleSize = pStreamHdr->DataUsed;
+                    } else {
+                        pDeviceExtension->VideoInfoHeader.DataFormat.SampleSize = pStreamHdr->DataUsed;
+                    }
+                }
+            } except (EXCEPTION_EXECUTE_HANDLER) {
+                L("[%s] Exception in 0x%p read (0x%x)\n", FN, pMdlBufferOut, GetExceptionCode());
+            }
 #endif
-		}
-	}
+        }
+    }
 
-	if (m >= 30) m = 0;
+    if (m >= 30) m = 0;
 
-	IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-	InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
-
-	return STATUS_CONTINUE_COMPLETION; 
+    IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+    InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+    
+    return STATUS_CONTINUE_COMPLETION; 
 }
 
 /*
