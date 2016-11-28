@@ -1556,30 +1556,30 @@ NTSTATUS FilterDispatchIo(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 PCHAR PnPMinorFunctionString(UCHAR MinorFunction)
 {
     switch (MinorFunction) {
-        case IRP_MN_START_DEVICE:					return "IRP_MN_START_DEVICE";
-        case IRP_MN_QUERY_REMOVE_DEVICE:			return "IRP_MN_QUERY_REMOVE_DEVICE";
-        case IRP_MN_REMOVE_DEVICE:					return "IRP_MN_REMOVE_DEVICE";
-        case IRP_MN_CANCEL_REMOVE_DEVICE:			return "IRP_MN_CANCEL_REMOVE_DEVICE";
-        case IRP_MN_STOP_DEVICE:					return "IRP_MN_STOP_DEVICE";
-        case IRP_MN_QUERY_STOP_DEVICE:				return "IRP_MN_QUERY_STOP_DEVICE";
-        case IRP_MN_CANCEL_STOP_DEVICE:				return "IRP_MN_CANCEL_STOP_DEVICE";
-        case IRP_MN_QUERY_DEVICE_RELATIONS:			return "IRP_MN_QUERY_DEVICE_RELATIONS";
-        case IRP_MN_QUERY_INTERFACE:				return "IRP_MN_QUERY_INTERFACE";
-        case IRP_MN_QUERY_CAPABILITIES:				return "IRP_MN_QUERY_CAPABILITIES";
-        case IRP_MN_QUERY_RESOURCES:				return "IRP_MN_QUERY_RESOURCES";
-        case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:	return "IRP_MN_QUERY_RESOURCE_REQUIREMENTS";
-        case IRP_MN_QUERY_DEVICE_TEXT:				return "IRP_MN_QUERY_DEVICE_TEXT";
-        case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:	return "IRP_MN_FILTER_RESOURCE_REQUIREMENTS";
-        case IRP_MN_READ_CONFIG:					return "IRP_MN_READ_CONFIG";
-        case IRP_MN_WRITE_CONFIG:					return "IRP_MN_WRITE_CONFIG";
-        case IRP_MN_EJECT:							return "IRP_MN_EJECT";
-        case IRP_MN_SET_LOCK:						return "IRP_MN_SET_LOCK";
-        case IRP_MN_QUERY_ID:						return "IRP_MN_QUERY_ID";
-        case IRP_MN_QUERY_PNP_DEVICE_STATE:			return "IRP_MN_QUERY_PNP_DEVICE_STATE";
-        case IRP_MN_QUERY_BUS_INFORMATION:			return "IRP_MN_QUERY_BUS_INFORMATION";
-        case IRP_MN_DEVICE_USAGE_NOTIFICATION:		return "IRP_MN_DEVICE_USAGE_NOTIFICATION";
-        case IRP_MN_SURPRISE_REMOVAL:				return "IRP_MN_SURPRISE_REMOVAL";
-        default:									return "UNKNOWN_PNP_IRP";
+        case IRP_MN_START_DEVICE:                   return "IRP_MN_START_DEVICE";
+        case IRP_MN_QUERY_REMOVE_DEVICE:            return "IRP_MN_QUERY_REMOVE_DEVICE";
+        case IRP_MN_REMOVE_DEVICE:                  return "IRP_MN_REMOVE_DEVICE";
+        case IRP_MN_CANCEL_REMOVE_DEVICE:           return "IRP_MN_CANCEL_REMOVE_DEVICE";
+        case IRP_MN_STOP_DEVICE:                    return "IRP_MN_STOP_DEVICE";
+        case IRP_MN_QUERY_STOP_DEVICE:              return "IRP_MN_QUERY_STOP_DEVICE";
+        case IRP_MN_CANCEL_STOP_DEVICE:             return "IRP_MN_CANCEL_STOP_DEVICE";
+        case IRP_MN_QUERY_DEVICE_RELATIONS:         return "IRP_MN_QUERY_DEVICE_RELATIONS";
+        case IRP_MN_QUERY_INTERFACE:                return "IRP_MN_QUERY_INTERFACE";
+        case IRP_MN_QUERY_CAPABILITIES:             return "IRP_MN_QUERY_CAPABILITIES";
+        case IRP_MN_QUERY_RESOURCES:                return "IRP_MN_QUERY_RESOURCES";
+        case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:    return "IRP_MN_QUERY_RESOURCE_REQUIREMENTS";
+        case IRP_MN_QUERY_DEVICE_TEXT:              return "IRP_MN_QUERY_DEVICE_TEXT";
+        case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:   return "IRP_MN_FILTER_RESOURCE_REQUIREMENTS";
+        case IRP_MN_READ_CONFIG:                    return "IRP_MN_READ_CONFIG";
+        case IRP_MN_WRITE_CONFIG:                   return "IRP_MN_WRITE_CONFIG";
+        case IRP_MN_EJECT:                          return "IRP_MN_EJECT";
+        case IRP_MN_SET_LOCK:                       return "IRP_MN_SET_LOCK";
+        case IRP_MN_QUERY_ID:                       return "IRP_MN_QUERY_ID";
+        case IRP_MN_QUERY_PNP_DEVICE_STATE:         return "IRP_MN_QUERY_PNP_DEVICE_STATE";
+        case IRP_MN_QUERY_BUS_INFORMATION:          return "IRP_MN_QUERY_BUS_INFORMATION";
+        case IRP_MN_DEVICE_USAGE_NOTIFICATION:      return "IRP_MN_DEVICE_USAGE_NOTIFICATION";
+        case IRP_MN_SURPRISE_REMOVAL:               return "IRP_MN_SURPRISE_REMOVAL";
+        default:                                    return "UNKNOWN_PNP_IRP";
     }
 }
 #endif
