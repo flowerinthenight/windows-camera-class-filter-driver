@@ -38,39 +38,39 @@ GUID GUID_PROPSETID_VidcapCameraControl = { STATIC_PROPSETID_VIDCAP_CAMERACONTRO
  */
 NTSTATUS DriverEntry(__in PDRIVER_OBJECT DriverObject, __in PUNICODE_STRING RegistryPath)
 {
-	NTSTATUS ntStatus = STATUS_SUCCESS;
-	PDRIVER_DISPATCH *pfnDriverDispatch;
-	ULONG ulIndex;
+    NTSTATUS ntStatus = STATUS_SUCCESS;
+    PDRIVER_DISPATCH *pfnDriverDispatch;
+    ULONG ulIndex;
 
-	UNREFERENCED_PARAMETER (RegistryPath);
+    UNREFERENCED_PARAMETER (RegistryPath);
 
-	L("[%s] Built %s %s\n", FN, __DATE__, __TIME__);
+    L("[%s] Built %s %s\n", FN, __DATE__, __TIME__);
 
-	/*
-	 * Create dispatch points.
-	 */
-	for (ulIndex = (ULONG)0, pfnDriverDispatch = DriverObject->MajorFunction;
-		ulIndex <= IRP_MJ_MAXIMUM_FUNCTION;
-		ulIndex++, pfnDriverDispatch++)
-	{
-		*pfnDriverDispatch = FilterPass;
+    /*
+     * Create dispatch points.
+     */
+    for (ulIndex = (ULONG)0, pfnDriverDispatch = DriverObject->MajorFunction;
+        ulIndex <= IRP_MJ_MAXIMUM_FUNCTION;
+        ulIndex++, pfnDriverDispatch++)
+    {
+        *pfnDriverDispatch = FilterPass;
 	}
 
-	DriverObject->MajorFunction[IRP_MJ_PNP] = FilterDispatchPnp;
-	DriverObject->MajorFunction[IRP_MJ_POWER] = FilterDispatchPower;
-	DriverObject->DriverExtension->AddDevice = FilterAddDevice;
-	DriverObject->DriverUnload = FilterUnload;
+    DriverObject->MajorFunction[IRP_MJ_PNP] = FilterDispatchPnp;
+    DriverObject->MajorFunction[IRP_MJ_POWER] = FilterDispatchPower;
+    DriverObject->DriverExtension->AddDevice = FilterAddDevice;
+    DriverObject->DriverUnload = FilterUnload;
 
-	/*
-	 * Set the following dispatch points as we will be doing something useful to these requests instead of just passing them down. 
-	 */
-	DriverObject->MajorFunction[IRP_MJ_CREATE] = 
-		DriverObject->MajorFunction[IRP_MJ_CLOSE] = 
-		DriverObject->MajorFunction[IRP_MJ_CLEANUP] = 
-		DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = 
-		FilterDispatchIo;
+    /*
+     * Set the following dispatch points as we will be doing something useful to these requests instead of just passing them down. 
+     */
+    DriverObject->MajorFunction[IRP_MJ_CREATE] = 
+        DriverObject->MajorFunction[IRP_MJ_CLOSE] = 
+        DriverObject->MajorFunction[IRP_MJ_CLEANUP] = 
+        DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = 
+        FilterDispatchIo;
 
-	return ntStatus;
+    return ntStatus;
 }
 
 /*
@@ -86,186 +86,184 @@ NTSTATUS DriverEntry(__in PDRIVER_OBJECT DriverObject, __in PUNICODE_STRING Regi
  */
 NTSTATUS FilterAddDevice(__in PDRIVER_OBJECT DriverObject, __in PDEVICE_OBJECT PhysicalDeviceObject)
 {
-	NTSTATUS ntStatus = STATUS_SUCCESS;
-	PDEVICE_OBJECT pDeviceObject = NULL;
-	PDEVICE_EXTENSION pDeviceExtension = NULL;
-	ULONG ulDeviceType = (ULONG)FILE_DEVICE_UNKNOWN;
-	BOOL bPdoSupported = FALSE;
-	ULONG cbSize;
-	HANDLE hThreadTemp;
-	WCHAR szTmpInfo[512];
-	ULONG cbTmpInfoSize = 0;
+    NTSTATUS ntStatus = STATUS_SUCCESS;
+    PDEVICE_OBJECT pDeviceObject = NULL;
+    PDEVICE_EXTENSION pDeviceExtension = NULL;
+    ULONG ulDeviceType = (ULONG)FILE_DEVICE_UNKNOWN;
+    BOOL bPdoSupported = FALSE;
+    ULONG cbSize;
+    HANDLE hThreadTemp;
+    WCHAR szTmpInfo[512];
+    ULONG cbTmpInfoSize = 0;
 
-	PAGED_CODE();
+    PAGED_CODE();
 
-	/*
-	 * IoIsWdmVersionAvailable(1, 0x20) returns TRUE on os after Windows 2000.
-	 */
-	if (RtlIsNtDdiVersionAvailable(NTDDI_WINXP))
-	{
-		/*
-		 * Win2K system bugchecks if the filter attached to a storage device doesn't specify the same DeviceType as the device it's
-		 * attaching to. This bugcheck happens in the filesystem when you disable the devicestack whose top level deviceobject
-		 * doesn't have a VPB. To workaround we will get the toplevel object's DeviceType and specify that in IoCreateDevice.
-		 */
-		pDeviceObject = IoGetAttachedDeviceReference(PhysicalDeviceObject);
-		ulDeviceType = pDeviceObject->DeviceType;
-		ObDereferenceObject(pDeviceObject);
-	}
+    /*
+     * IoIsWdmVersionAvailable(1, 0x20) returns TRUE on os after Windows 2000.
+     */
+    if (RtlIsNtDdiVersionAvailable(NTDDI_WINXP))
+    {
+        /*
+         * Win2K system bugchecks if the filter attached to a storage device doesn't specify the same DeviceType as the device it's
+         * attaching to. This bugcheck happens in the filesystem when you disable the devicestack whose top level deviceobject
+         * doesn't have a VPB. To workaround we will get the toplevel object's DeviceType and specify that in IoCreateDevice.
+         */
+        pDeviceObject = IoGetAttachedDeviceReference(PhysicalDeviceObject);
+        ulDeviceType = pDeviceObject->DeviceType;
+        ObDereferenceObject(pDeviceObject);
+    }
 
-	/*
-	 * Create a filter device object.
-	 */
-	ntStatus = IoCreateDevice(DriverObject,
-							  sizeof(DEVICE_EXTENSION),
-							  NULL,
-							  ulDeviceType,
-							  FILE_DEVICE_SECURE_OPEN,
-							  FALSE,
-							  &pDeviceObject);
+    /*
+     * Create a filter device object.
+     */
+    ntStatus = IoCreateDevice(DriverObject,
+                              sizeof(DEVICE_EXTENSION),
+                              NULL,
+                              ulDeviceType,
+                              FILE_DEVICE_SECURE_OPEN,
+                              FALSE,
+                              &pDeviceObject);
 
 	if (!NT_SUCCESS(ntStatus))
-	{
-		/*
-		 * Returning failure here prevents the entire stack from functioning, but most likely the rest of the stack will not be
-		 * able to create device objects either, so it is still OK.
-		 */
-		return ntStatus;
-	}
+    {
+        /*
+         * Returning failure here prevents the entire stack from functioning, but most likely the rest of the stack will not be
+         * able to create device objects either, so it is still OK.
+         */
+        return ntStatus;
+    }
 
-	L("[%s] AddDevice PDO (0x%p) FDO (0x%p)\n", FN, PhysicalDeviceObject, pDeviceObject);
+    L("[%s] AddDevice PDO (0x%p) FDO (0x%p)\n", FN, PhysicalDeviceObject, pDeviceObject);
 
-	pDeviceExtension = (PDEVICE_EXTENSION)pDeviceObject->DeviceExtension;
-	pDeviceExtension->Common.Type = DEVICE_TYPE_FIDO;
-	pDeviceExtension->NextLowerDriver = IoAttachDeviceToDeviceStack(pDeviceObject, PhysicalDeviceObject);
+    pDeviceExtension = (PDEVICE_EXTENSION)pDeviceObject->DeviceExtension;
+    pDeviceExtension->Common.Type = DEVICE_TYPE_FIDO;
+    pDeviceExtension->NextLowerDriver = IoAttachDeviceToDeviceStack(pDeviceObject, PhysicalDeviceObject);
 
-	L("[%s] AddDevice DeviceExtension: 0x%p\n", FN, pDeviceExtension);
+    L("[%s] AddDevice DeviceExtension: 0x%p\n", FN, pDeviceExtension);
 
-	/*
-	 * Failure for attachment is an indication of a broken plug & play system.
-	 */
-	if (pDeviceExtension->NextLowerDriver == NULL)
-	{
-		IoDeleteDevice(pDeviceObject);
-		return STATUS_UNSUCCESSFUL;
-	}
+    /*
+     * Failure for attachment is an indication of a broken plug & play system.
+     */
+    if (pDeviceExtension->NextLowerDriver == NULL)
+    {
+        IoDeleteDevice(pDeviceObject);
+        return STATUS_UNSUCCESSFUL;
+    }
 
-	pDeviceObject->Flags |= pDeviceExtension->NextLowerDriver->Flags & (DO_BUFFERED_IO | DO_DIRECT_IO | DO_POWER_PAGABLE);
-	pDeviceObject->DeviceType = pDeviceExtension->NextLowerDriver->DeviceType;
-	pDeviceObject->Characteristics = pDeviceExtension->NextLowerDriver->Characteristics;
+    pDeviceObject->Flags |= pDeviceExtension->NextLowerDriver->Flags & (DO_BUFFERED_IO | DO_DIRECT_IO | DO_POWER_PAGABLE);
+    pDeviceObject->DeviceType = pDeviceExtension->NextLowerDriver->DeviceType;
+    pDeviceObject->Characteristics = pDeviceExtension->NextLowerDriver->Characteristics;
 
-	/*
-	 * Let us use remove lock to keep count of IRPs so that we don't detach and delete our deviceobject until all pending I/Os
-	 * in our devstack are completed. Remlock is required to protect us from various race conditions where our driver can get
-	 * unloaded while we are still running dispatch or completion code.
-	 */
-	IoInitializeRemoveLock(&pDeviceExtension->RemoveLock, POOL_TAG, 0, 0);
+    /*
+     * Let us use remove lock to keep count of IRPs so that we don't detach and delete our deviceobject until all pending I/Os
+     * in our devstack are completed. Remlock is required to protect us from various race conditions where our driver can get
+     * unloaded while we are still running dispatch or completion code.
+     */
+    IoInitializeRemoveLock(&pDeviceExtension->RemoveLock, POOL_TAG, 0, 0);
 
-	pDeviceExtension->PhysicalDeviceObject = PhysicalDeviceObject;
-	pDeviceExtension->Self = pDeviceObject;
-	pDeviceExtension->RemoveLockCount = 0;
-	pDeviceExtension->GlobalStreamOpen = 0;
-	pDeviceExtension->PinNameOpen = 0;
-	pDeviceExtension->InstanceCount = (ULONG)0;
-	pDeviceExtension->DataUsed = 0;
+    pDeviceExtension->PhysicalDeviceObject = PhysicalDeviceObject;
+    pDeviceExtension->Self = pDeviceObject;
+    pDeviceExtension->RemoveLockCount = 0;
+    pDeviceExtension->GlobalStreamOpen = 0;
+    pDeviceExtension->PinNameOpen = 0;
+    pDeviceExtension->InstanceCount = (ULONG)0;
+    pDeviceExtension->DataUsed = 0;
 
-	InterlockedAnd(&pDeviceExtension->IsVideoInfoHeader2, 0);
-	InterlockedAnd(&pDeviceExtension->KsStateRun, 0);
-	InterlockedAnd(&pDeviceExtension->StreamerPid, 0);
+    InterlockedAnd(&pDeviceExtension->IsVideoInfoHeader2, 0);
+    InterlockedAnd(&pDeviceExtension->KsStateRun, 0);
+    InterlockedAnd(&pDeviceExtension->StreamerPid, 0);
 
-	KeInitializeEvent(&pDeviceExtension->ControlLock, SynchronizationEvent, TRUE);
+    KeInitializeEvent(&pDeviceExtension->ControlLock, SynchronizationEvent, TRUE);
 
-	/*
-	 * Get our PDO friendly name and check whether we support it at this time or not.
-	 */
-	ntStatus = IoGetDeviceProperty(PhysicalDeviceObject,
-								   DevicePropertyFriendlyName,
-								   512 * sizeof(WCHAR),
-								   szTmpInfo,
-								   (PULONG)&cbTmpInfoSize);
+    /*
+     * Get our PDO friendly name and check whether we support it at this time or not.
+     */
+    ntStatus = IoGetDeviceProperty(PhysicalDeviceObject,
+                                   DevicePropertyFriendlyName,
+                                   512 * sizeof(WCHAR),
+                                   szTmpInfo,
+                                   (PULONG)&cbTmpInfoSize);
 
-	if (NT_SUCCESS(ntStatus))
-	{
-		if (_wcsicmp(szTmpInfo, L"Integrated Camera") == 0)
-		{
-			bPdoSupported = TRUE;
-		}
-	}
-	else
-	{
-		ntStatus = IoGetDeviceProperty(PhysicalDeviceObject,
-									   DevicePropertyDeviceDescription,
-									   512 * sizeof(WCHAR),
-									   szTmpInfo,
-									   (PULONG)&cbTmpInfoSize);
+    if (NT_SUCCESS(ntStatus))
+    {
+        if (_wcsicmp(szTmpInfo, L"Integrated Camera") == 0)
+        {
+            bPdoSupported = TRUE;
+        }
+    }
+    else
+    {
+        ntStatus = IoGetDeviceProperty(PhysicalDeviceObject,
+                                       DevicePropertyDeviceDescription,
+                                       512 * sizeof(WCHAR),
+                                       szTmpInfo,
+                                       (PULONG)&cbTmpInfoSize);
 
-		if (NT_SUCCESS(ntStatus))
-		{
-			if (_wcsicmp(szTmpInfo, L"Intel(R) Imaging Signal Processor 2400") == 0)
-			{
-				bPdoSupported = TRUE;
-			}
-		}
-	}
+        if (NT_SUCCESS(ntStatus))
+        {
+            if (_wcsicmp(szTmpInfo, L"Intel(R) Imaging Signal Processor 2400") == 0)
+            {
+                bPdoSupported = TRUE;
+            }
+        }
+    }
 
-	if (bPdoSupported)
-	{
-		L("[%s] 0x%p PDO supported.\n", FN, PhysicalDeviceObject);
-		InterlockedIncrement(&pDeviceExtension->IsPdoSupported);
+    if (bPdoSupported)
+    {
+        L("[%s] 0x%p PDO supported.\n", FN, PhysicalDeviceObject);
+        InterlockedIncrement(&pDeviceExtension->IsPdoSupported);
 
-		cbSize = (1920 * 1080 * 2) + sizeof(SHAREDBUFFER_HEADER);
-		pDeviceExtension->StreamBuffer = (LPBYTE)ExAllocatePoolWithTag(NonPagedPool, cbSize, 'UVCF');
-		L("[%s] Intermediate streambuffer allocated (%d).\n", FN, cbSize);
+        cbSize = (1920 * 1080 * 2) + sizeof(SHAREDBUFFER_HEADER);
+        pDeviceExtension->StreamBuffer = (LPBYTE)ExAllocatePoolWithTag(NonPagedPool, cbSize, 'UVCF');
+        L("[%s] Intermediate streambuffer allocated (%d).\n", FN, cbSize);
 
-		/*
-		 * Initialize system thread control events.
-		 */
-		KeInitializeEvent(&pDeviceExtension->EventCtrl, NotificationEvent, FALSE);
-		KeInitializeEvent(&pDeviceExtension->EventTerm, NotificationEvent, FALSE);
+        /*
+         * Initialize system thread control events.
+         */
+        KeInitializeEvent(&pDeviceExtension->EventCtrl, NotificationEvent, FALSE);
+        KeInitializeEvent(&pDeviceExtension->EventTerm, NotificationEvent, FALSE);
 
-		/*
-		 * Start our 'restreamer' system thread.
-		 */
-		ntStatus = PsCreateSystemThread(&hThreadTemp,
-										THREAD_ALL_ACCESS,
-										NULL,
-										NULL,
-										NULL,
-										(PKSTART_ROUTINE)StreamMonitorSystemThread,
-										pDeviceExtension);
+        /*
+         * Start our 'restreamer' system thread.
+         */
+        ntStatus = PsCreateSystemThread(&hThreadTemp,
+                                        THREAD_ALL_ACCESS,
+                                        NULL,
+                                        NULL,
+                                        NULL,
+                                        (PKSTART_ROUTINE)StreamMonitorSystemThread,
+                                        pDeviceExtension);
 
-		if (!NT_SUCCESS(ntStatus))
-		{
-			L("[%s] PsCreateSystemThread error 0x%x\n", FN, ntStatus);
-		}
-		else
-		{
-			ObReferenceObjectByHandle(hThreadTemp,
-									  THREAD_ALL_ACCESS,
-									  NULL,
-									  KernelMode,
-									  (PVOID*)&pDeviceExtension->ThreadRestream,
-									  NULL);
+        if (!NT_SUCCESS(ntStatus))
+        {
+            L("[%s] PsCreateSystemThread error 0x%x\n", FN, ntStatus);
+        }
+        else
+        {
+            ObReferenceObjectByHandle(hThreadTemp,
+                                      THREAD_ALL_ACCESS,
+                                      NULL,
+                                      KernelMode,
+                                      (PVOID*)&pDeviceExtension->ThreadRestream,
+                                      NULL);
+            
+            ZwClose(hThreadTemp);
+            L("[%s] System thread 0x%p created.\n", FN, pDeviceExtension->ThreadRestream);
+        }
+    }
+    else
+    {
+        L("[%s] 0x%p PDO not supported at this time.\n", FN, PhysicalDeviceObject);
+    }
+    
+    /*
+     * Set the initial state of the Filter DO
+     */
+    INITIALIZE_PNP_STATE(pDeviceExtension);
 
-			ZwClose(hThreadTemp);
-			L("[%s] System thread 0x%p created.\n", FN, pDeviceExtension->ThreadRestream);
-		}
-	}
-	else
-	{
-		L("[%s] 0x%p PDO not supported at this time.\n", FN, PhysicalDeviceObject);
-	}
-
-	/*
-	 * Set the initial state of the Filter DO
-	 */
-	INITIALIZE_PNP_STATE(pDeviceExtension);
-
-	L("[%s] 0x%p to 0x%p->0x%p\n", FN, pDeviceObject, pDeviceExtension->NextLowerDriver, PhysicalDeviceObject);
-
-	pDeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
-
-	return STATUS_SUCCESS;
+    L("[%s] 0x%p to 0x%p->0x%p\n", FN, pDeviceObject, pDeviceExtension->NextLowerDriver, PhysicalDeviceObject);
+    pDeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
+    return STATUS_SUCCESS;
 }
 
 /*
