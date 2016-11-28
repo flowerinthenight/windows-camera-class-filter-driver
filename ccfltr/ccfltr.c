@@ -1039,235 +1039,195 @@ NTSTATUS FilterPass(PDEVICE_OBJECT DeviceObject, PIRP Irp)
  */
 NTSTATUS FilterDispatchPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
-	PDEVICE_EXTENSION pDeviceExtension;
-	PIO_STACK_LOCATION pIrpStack;
-	NTSTATUS ntStatus;
-	KEVENT knEvent;
+    PDEVICE_EXTENSION pDeviceExtension;
+    PIO_STACK_LOCATION pIrpStack;
+    NTSTATUS ntStatus;
+    KEVENT knEvent;
+    
+    PAGED_CODE();
+    
+    pDeviceExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
+    pIrpStack = IoGetCurrentIrpStackLocation(Irp);
+    
+    L("[%s] FilterDO %s IRP:0x%p\n", FN, PnPMinorFunctionString(pIrpStack->MinorFunction), Irp);
 
-	PAGED_CODE();
-
-	pDeviceExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
-	pIrpStack = IoGetCurrentIrpStackLocation(Irp);
-
-	L("[%s] FilterDO %s IRP:0x%p\n", FN, PnPMinorFunctionString(pIrpStack->MinorFunction), Irp);
-
-	ntStatus = IoAcquireRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+    ntStatus = IoAcquireRemoveLock(&pDeviceExtension->RemoveLock, Irp);
 	
-	if (!NT_SUCCESS (ntStatus))
-	{
-		Irp->IoStatus.Status = ntStatus;
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
-		return ntStatus;
-	}
+    if (!NT_SUCCESS (ntStatus)) {
+        Irp->IoStatus.Status = ntStatus;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return ntStatus;
+    }
 
-	InterlockedIncrement(&pDeviceExtension->RemoveLockCount);
+    InterlockedIncrement(&pDeviceExtension->RemoveLockCount);
 
-	switch (pIrpStack->MinorFunction)
-	{
-		case IRP_MN_START_DEVICE:
-		{
-			/*
-			 * The device is starting. We cannot touch the device (send it any non pnp irps) until a start device has been passed
-			 * down to the lower drivers.
-			 */
-			KeInitializeEvent(&knEvent, NotificationEvent, FALSE);
-			IoCopyCurrentIrpStackLocationToNext(Irp);
-			IoSetCompletionRoutine(Irp, FilterStartCompletionRoutine, &knEvent, TRUE, TRUE, TRUE);
-			ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+    switch (pIrpStack->MinorFunction) {
+        case IRP_MN_START_DEVICE:
+        {
+            /*
+             * The device is starting. We cannot touch the device (send it any non pnp irps) until a start device has been passed
+             * down to the lower drivers.
+             */
+            KeInitializeEvent(&knEvent, NotificationEvent, FALSE);
+            IoCopyCurrentIrpStackLocationToNext(Irp);
+            IoSetCompletionRoutine(Irp, FilterStartCompletionRoutine, &knEvent, TRUE, TRUE, TRUE);
+            ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+            
+            /*
+             * Wait for lower drivers to be done with the Irp. Important thing to note here is when you allocate memory for an event
+             * in the stack you must do a KernelMode wait instead of UserMode to prevent the stack from getting paged out.
+             */
+            if (ntStatus == STATUS_PENDING) {
+                KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, NULL);
+                ntStatus = Irp->IoStatus.Status;
+            }
+            
+            if (NT_SUCCESS(ntStatus)) {
+                /* As we are successfully now back, we will first set our state to Started. */
+                SET_NEW_PNP_STATE(pDeviceExtension, Started);
+                
+                /*
+                 * On the way up inherit FILE_REMOVABLE_MEDIA during Start. This characteristic is available only after the driver
+                 * stack is started!.
+                 */
+                if (pDeviceExtension->NextLowerDriver->Characteristics & FILE_REMOVABLE_MEDIA) {
+                    DeviceObject->Characteristics |= FILE_REMOVABLE_MEDIA;
+                }
 
-			/*
-			 * Wait for lower drivers to be done with the Irp. Important thing to note here is when you allocate memory for an event
-			 * in the stack you must do a KernelMode wait instead of UserMode to prevent the stack from getting paged out.
-			 */
-			if (ntStatus == STATUS_PENDING)
-			{
-				KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, NULL);          
-				ntStatus = Irp->IoStatus.Status;
-			}
+                /* If PreviousPnPState is stopped then we are being stopped temporarily and restarted for resource rebalance. */
+                if (Stopped != pDeviceExtension->PreviousPnPState) {
+                    /* Device is started for the first time. */
+                    FilterCreateControlObject(DeviceObject);
+                }
+            }
+            
+            Irp->IoStatus.Status = ntStatus;
+            IoCompleteRequest (Irp, IO_NO_INCREMENT);
+            
+            IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+            InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+            
+            return ntStatus;
+        }
 
-			if (NT_SUCCESS(ntStatus))
-			{
-				/*
-				 * As we are successfully now back, we will first set our state to Started.
-				 */
-				SET_NEW_PNP_STATE(pDeviceExtension, Started);
+        case IRP_MN_REMOVE_DEVICE:
+        {
+            if (InterlockedCompareExchange(&pDeviceExtension->IsPdoSupported, MAXLONG, MAXLONG) > 0) {
+                /* Kill our system thread first. */
+                KeSetEvent(&pDeviceExtension->EventTerm, 0, FALSE);
+                KeWaitForSingleObject(pDeviceExtension->ThreadRestream, Executive, KernelMode, FALSE, NULL);
+                ObDereferenceObject(pDeviceExtension->ThreadRestream);
 
-				/*
-				 * On the way up inherit FILE_REMOVABLE_MEDIA during Start. This characteristic is available only after the driver
-				 * stack is started!.
-				 */
-				if (pDeviceExtension->NextLowerDriver->Characteristics & FILE_REMOVABLE_MEDIA)
-				{
-					DeviceObject->Characteristics |= FILE_REMOVABLE_MEDIA;
-				}
+                L("[%s] Intermediate streamBuffer released.\n", FN);
+                ExFreePoolWithTag((PVOID)pDeviceExtension->StreamBuffer, 'UVCF'); 
+            }
 
-				/*
-				 * If PreviousPnPState is stopped then we are being stopped temporarily and restarted for resource rebalance. 
-				 */
-				if (Stopped != pDeviceExtension->PreviousPnPState)
-				{
-					/*
-					 * Device is started for the first time.
-					 */
-					FilterCreateControlObject(DeviceObject);
-				}
-			}
+            /* Wait for all outstanding requests to complete */
+            IoReleaseRemoveLockAndWait(&pDeviceExtension->RemoveLock, Irp);
 
-			Irp->IoStatus.Status = ntStatus;
-			IoCompleteRequest (Irp, IO_NO_INCREMENT);
+            IoSkipCurrentIrpStackLocation(Irp);
+            ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
 
-			IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp); 
-			InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+            SET_NEW_PNP_STATE(pDeviceExtension, Deleted);
 
-			return ntStatus;
-		}
+            FilterDeleteControlObject(DeviceObject);
+            IoDetachDevice(pDeviceExtension->NextLowerDriver);
+            IoDeleteDevice(DeviceObject);
+            
+            return ntStatus;
+        }
 
-		case IRP_MN_REMOVE_DEVICE:
-		{
-			if (InterlockedCompareExchange(&pDeviceExtension->IsPdoSupported, MAXLONG, MAXLONG) > 0)
-			{
-				/*
-				 * Kill our system thread first.
-				 */
-				KeSetEvent(&pDeviceExtension->EventTerm, 0, FALSE);
-				KeWaitForSingleObject(pDeviceExtension->ThreadRestream, Executive, KernelMode, FALSE, NULL);
-				ObDereferenceObject(pDeviceExtension->ThreadRestream);
+        case IRP_MN_QUERY_STOP_DEVICE:
+        {
+            SET_NEW_PNP_STATE(pDeviceExtension, StopPending);
+            ntStatus = STATUS_SUCCESS;
+            break;
+        }
 
-				L("[%s] Intermediate streamBuffer released.\n", FN);
-				ExFreePoolWithTag((PVOID)pDeviceExtension->StreamBuffer, 'UVCF'); 
-			}
+        case IRP_MN_CANCEL_STOP_DEVICE:
+        {
+            /*
+             * Check to see whether you have received cancel-stop without first receiving a query-stop. This could happen if
+             * someone above us fails a query-stop and passes down the subsequent cancel-stop.
+             */
+            if (StopPending == pDeviceExtension->DevicePnPState) {
+                /* We did receive a query-stop, so restore. */
+                RESTORE_PREVIOUS_PNP_STATE(pDeviceExtension);
+            }
+            
+            /* We must not fail this IRP. */
+            ntStatus = STATUS_SUCCESS;
+            break;
+        }
 
-			/*
-			 * Wait for all outstanding requests to complete
-			 */
-			IoReleaseRemoveLockAndWait(&pDeviceExtension->RemoveLock, Irp);
+        case IRP_MN_STOP_DEVICE:
+        {
+            SET_NEW_PNP_STATE(pDeviceExtension, Stopped);
+            ntStatus = STATUS_SUCCESS;
+            break;
+        }
 
-			IoSkipCurrentIrpStackLocation(Irp);
-			ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+        case IRP_MN_QUERY_REMOVE_DEVICE:
+        {
+            SET_NEW_PNP_STATE(pDeviceExtension, RemovePending);
+            ntStatus = STATUS_SUCCESS;
+            break;
+        }
 
-			SET_NEW_PNP_STATE(pDeviceExtension, Deleted);
-
-			FilterDeleteControlObject(DeviceObject);
-			IoDetachDevice(pDeviceExtension->NextLowerDriver);
-			IoDeleteDevice(DeviceObject);
-			
-			return ntStatus;
-		}
-
-		case IRP_MN_QUERY_STOP_DEVICE:
-		{
-			SET_NEW_PNP_STATE(pDeviceExtension, StopPending);
-			ntStatus = STATUS_SUCCESS;
-			break;
-		}
-
-		case IRP_MN_CANCEL_STOP_DEVICE:
-		{
-			/*
-			 * Check to see whether you have received cancel-stop without first receiving a query-stop. This could happen if
-			 * someone above us fails a query-stop and passes down the subsequent cancel-stop.
-			 */
-			if (StopPending == pDeviceExtension->DevicePnPState)
-			{
-				/*
-				 * We did receive a query-stop, so restore.
-				 */
-				RESTORE_PREVIOUS_PNP_STATE(pDeviceExtension);
-			}
-
-			/*
-			 * We must not fail this IRP.
-			 */
-			ntStatus = STATUS_SUCCESS;
-			break;
-		}
-
-		case IRP_MN_STOP_DEVICE:
-		{
-			SET_NEW_PNP_STATE(pDeviceExtension, Stopped);
-			ntStatus = STATUS_SUCCESS;
-			break;
-		}
-
-		case IRP_MN_QUERY_REMOVE_DEVICE:
-		{
-			SET_NEW_PNP_STATE(pDeviceExtension, RemovePending);
-			ntStatus = STATUS_SUCCESS;
-			break;
-		}
-
-		case IRP_MN_SURPRISE_REMOVAL:
-		{
-			SET_NEW_PNP_STATE(pDeviceExtension, SurpriseRemovePending);
-			ntStatus = STATUS_SUCCESS;
-			break;
-		}
-
-		case IRP_MN_CANCEL_REMOVE_DEVICE:
-		{
-			/*
-			 * Check to see whether you have received cancel-remove without first receiving a query-remove. This could happen if
-			 * someone above us fails a query-remove and passes down the subsequent cancel-remove.
-			 */
-			if (RemovePending == pDeviceExtension->DevicePnPState)
-			{
-				/*
-				 * We did receive a query-remove, so restore.
-				 */
-				RESTORE_PREVIOUS_PNP_STATE(pDeviceExtension);
-			}
-
-			/*
-			 * We must not fail this IRP.
-			 */
-			ntStatus = STATUS_SUCCESS;
-			break;
-		}
-
-		case IRP_MN_DEVICE_USAGE_NOTIFICATION:
-		{
-			/*
-			 * On the way down, pagable might become set. Mimic the driver above us. If no one is above us, just set pagable.
-			 */
+        case IRP_MN_SURPRISE_REMOVAL:
+        {
+            SET_NEW_PNP_STATE(pDeviceExtension, SurpriseRemovePending);
+            ntStatus = STATUS_SUCCESS;
+            break;
+        }
+        
+        case IRP_MN_CANCEL_REMOVE_DEVICE:
+        {
+            /*
+             * Check to see whether you have received cancel-remove without first receiving a query-remove. This could happen if
+             * someone above us fails a query-remove and passes down the subsequent cancel-remove.
+             */
+            if (RemovePending == pDeviceExtension->DevicePnPState) {
+                /* We did receive a query-remove, so restore. */
+                RESTORE_PREVIOUS_PNP_STATE(pDeviceExtension);
+            }
+            
+            /* We must not fail this IRP. */
+            ntStatus = STATUS_SUCCESS;
+            break;
+        }
+        
+        case IRP_MN_DEVICE_USAGE_NOTIFICATION:
+        {
+            /* On the way down, pagable might become set. Mimic the driver above us. If no one is above us, just set pagable. */
 #pragma prefast(suppress:__WARNING_INACCESSIBLE_MEMBER)
-			if ((DeviceObject->AttachedDevice == NULL) || (DeviceObject->AttachedDevice->Flags & DO_POWER_PAGABLE))
-			{
-				DeviceObject->Flags |= DO_POWER_PAGABLE;
-			}
+            if ((DeviceObject->AttachedDevice == NULL) || (DeviceObject->AttachedDevice->Flags & DO_POWER_PAGABLE)) {
+                DeviceObject->Flags |= DO_POWER_PAGABLE;
+            }
+            
+            IoCopyCurrentIrpStackLocationToNext(Irp);
+            IoSetCompletionRoutine(Irp, FilterDeviceUsageNotificationCompletionRoutine, NULL, TRUE, TRUE, TRUE);
 
-			IoCopyCurrentIrpStackLocationToNext(Irp);
+            return IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+        }
 
-			IoSetCompletionRoutine(Irp,
-								   FilterDeviceUsageNotificationCompletionRoutine,
-								   NULL,
-								   TRUE,
-								   TRUE,
-								   TRUE);
+        default:
+        {
+            /* If you don't handle any IRP you must leave the ntStatus as is. */
+            ntStatus = Irp->IoStatus.Status;
+            break;
+        }
+    }
 
-			return IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
-		}
-
-		default:
-		{
-			/*
-			 * If you don't handle any IRP you must leave the ntStatus as is.
-			 */
-			ntStatus = Irp->IoStatus.Status;
-			break;
-		}
-	}
-
-	/*
-	 * Pass the IRP down and forget it.
-	 */
-	Irp->IoStatus.Status = ntStatus;
-	IoSkipCurrentIrpStackLocation (Irp);
-	ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
-
-	IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-	InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+	/* Pass the IRP down and forget it. */
+    Irp->IoStatus.Status = ntStatus;
+    IoSkipCurrentIrpStackLocation (Irp);
+    ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+    
+    IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+    InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
 	
-	return ntStatus;
+    return ntStatus;
 }
 
 /*
