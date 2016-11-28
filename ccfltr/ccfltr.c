@@ -1421,37 +1421,36 @@ End:
 
 VOID FilterDeleteControlObject(__in PDEVICE_OBJECT DeviceObject)
 {
-	UNICODE_STRING symbolicLinkName;
-	PDEVICE_OBJECT pCtrlDeviceObject;
-	PDEVICE_EXTENSION pFilterExtenstion;
-	PCONTROL_DEVICE_EXTENSION pCtrlExtension;
+    UNICODE_STRING symbolicLinkName;
+    PDEVICE_OBJECT pCtrlDeviceObject;
+    PDEVICE_EXTENSION pFilterExtenstion;
+    PCONTROL_DEVICE_EXTENSION pCtrlExtension;
 
-	PAGED_CODE();    
+    PAGED_CODE();    
 
-	pFilterExtenstion = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
+    pFilterExtenstion = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
 
-	KeEnterCriticalRegion();
-	KeWaitForSingleObject(&pFilterExtenstion->ControlLock, Executive, KernelMode, FALSE, NULL);
+    KeEnterCriticalRegion();
+    KeWaitForSingleObject(&pFilterExtenstion->ControlLock, Executive, KernelMode, FALSE, NULL);
 
-	pCtrlDeviceObject = pFilterExtenstion->ControlDeviceObject;
+    pCtrlDeviceObject = pFilterExtenstion->ControlDeviceObject;
 
-	/*
-	 * If this is the last instance of the device then delete the control object and symbolic link to enable the pnp manager
-	 * to unload the driver.
-	 */
-	if (!(--pFilterExtenstion->InstanceCount) && pCtrlDeviceObject)
-	{
-		L("[%s] Delete ControlObject 0x%p\n", FN, pCtrlDeviceObject);
+    /*
+     * If this is the last instance of the device then delete the control object and symbolic link to enable the pnp manager
+     * to unload the driver.
+     */
+    if (!(--pFilterExtenstion->InstanceCount) && pCtrlDeviceObject) {
+        L("[%s] Delete ControlObject 0x%p\n", FN, pCtrlDeviceObject);
 
-		RtlInitUnicodeString(&symbolicLinkName, SYMBOLIC_NAME_STRING);
-		pCtrlExtension = (PCONTROL_DEVICE_EXTENSION)pCtrlDeviceObject->DeviceExtension;
-		pCtrlExtension->Deleted = (ULONG)TRUE;
-		IoDeleteSymbolicLink(&symbolicLinkName);
-		IoDeleteDevice(pCtrlDeviceObject);
-	}
+        RtlInitUnicodeString(&symbolicLinkName, SYMBOLIC_NAME_STRING);
+        pCtrlExtension = (PCONTROL_DEVICE_EXTENSION)pCtrlDeviceObject->DeviceExtension;
+        pCtrlExtension->Deleted = (ULONG)TRUE;
+        IoDeleteSymbolicLink(&symbolicLinkName);
+        IoDeleteDevice(pCtrlDeviceObject);
+    }
 
-	KeSetEvent(&pFilterExtenstion->ControlLock, IO_NO_INCREMENT, FALSE);
-	KeLeaveCriticalRegion();
+    KeSetEvent(&pFilterExtenstion->ControlLock, IO_NO_INCREMENT, FALSE);
+    KeLeaveCriticalRegion();
 }
 
 /*
@@ -1463,134 +1462,124 @@ VOID FilterDeleteControlObject(__in PDEVICE_OBJECT DeviceObject)
  */
 NTSTATUS FilterDispatchIo(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
-	PIO_STACK_LOCATION pIrpStack;
-	NTSTATUS ntStatus;
-	PCONTROL_DEVICE_EXTENSION pControlExtension;
-	PCOMMON_DEVICE_DATA pCommonData;
+    PIO_STACK_LOCATION pIrpStack;
+    NTSTATUS ntStatus;
+    PCONTROL_DEVICE_EXTENSION pControlExtension;
+    PCOMMON_DEVICE_DATA pCommonData;
 
-	PAGED_CODE();
+    PAGED_CODE();
 
-	pCommonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
+    pCommonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
 
-	/*
-	 * Please note that this is a common dispatch point for controlobject and filter deviceobject attached to the pnp stack. 
-	 */
-	if (pCommonData->Type == DEVICE_TYPE_FIDO)
-	{
-		/*
-		 * We will just pass the request down as we are not interested in handling requests that come on the PnP stack.
-		 */
-		return FilterPass(DeviceObject, Irp);    
-	}
+    /* Please note that this is a common dispatch point for controlobject and filter deviceobject attached to the pnp stack. */
+    if (pCommonData->Type == DEVICE_TYPE_FIDO) {
+        /* We will just pass the request down as we are not interested in handling requests that come on the PnP stack. */
+        return FilterPass(DeviceObject, Irp);    
+    }
 
-	ASSERT(pCommonData->Type == DEVICE_TYPE_CDO);
+    ASSERT(pCommonData->Type == DEVICE_TYPE_CDO);
 
-	pControlExtension = (PCONTROL_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
+    pControlExtension = (PCONTROL_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
 
-	/*
-	 * Else this is targeted at our control deviceobject so let's handle it. Here we will handle the IOCTl requests that come
-	 * from the app. We don't have to worry about acquiring remlocks for I/Os that come on our control object because the I/O
-	 * manager takes reference on our deviceobject when it initiates a request to our device and that keeps our driver from
-	 * unloading when we have pending I/Os. But we still have to watch out for a scenario where another driver can send
-	 * requests to our deviceobject directly without opening a handle.
-	 */
-	if (!pControlExtension->Deleted)
-	{
-		ntStatus = STATUS_SUCCESS;
-		Irp->IoStatus.Information = 0;
-		pIrpStack = IoGetCurrentIrpStackLocation(Irp);
+    /*
+     * Else this is targeted at our control deviceobject so let's handle it. Here we will handle the IOCTl requests that come
+     * from the app. We don't have to worry about acquiring remlocks for I/Os that come on our control object because the I/O
+     * manager takes reference on our deviceobject when it initiates a request to our device and that keeps our driver from
+     * unloading when we have pending I/Os. But we still have to watch out for a scenario where another driver can send
+     * requests to our deviceobject directly without opening a handle.
+     */
+    if (!pControlExtension->Deleted) {
+        ntStatus = STATUS_SUCCESS;
+        Irp->IoStatus.Information = 0;
+        pIrpStack = IoGetCurrentIrpStackLocation(Irp);
+        
+        switch (pIrpStack->MajorFunction) {
+            case IRP_MJ_CREATE:
+                // L("[%s] ControlObject: IRP_MJ_CREATE\n", FN);
+                break;
 
-		switch (pIrpStack->MajorFunction)
-		{
-			case IRP_MJ_CREATE:
-				// L("[%s] ControlObject: IRP_MJ_CREATE\n", FN);
-				break;
+            case IRP_MJ_CLOSE:
+                // L("[%s] ControlObject: IRP_MJ_CLOSE\n", FN);
+                break;
 
-			case IRP_MJ_CLOSE:
-				// L("[%s] ControlObject: IRP_MJ_CLOSE\n", FN);
-				break;
+            case IRP_MJ_CLEANUP:
+                // L("[%s] ControlObject: IRP_MJ_CLEANUP\n", FN);
+                break;
 
-			case IRP_MJ_CLEANUP:
-				// L("[%s] ControlObject: IRP_MJ_CLEANUP\n", FN);
-				break;
+            case  IRP_MJ_DEVICE_CONTROL:
+            {
+                switch (pIrpStack->Parameters.DeviceIoControl.IoControlCode) {
+                    case IOCTL_LENCFLTR_TEST:
+                        ntStatus = ControlDispatchIoTestDirect(DeviceObject, Irp);
+                        break;
 
-			case  IRP_MJ_DEVICE_CONTROL:
-			{
-				switch (pIrpStack->Parameters.DeviceIoControl.IoControlCode)
-				{
-					case IOCTL_LENCFLTR_TEST:
-						ntStatus = ControlDispatchIoTestDirect(DeviceObject, Irp);
-						break;
+                    case IOCTL_LENCFLTR_TEST_SM:
+                        ntStatus = STATUS_SUCCESS;
+                        break;
 
-					case IOCTL_LENCFLTR_TEST_SM:
-						ntStatus = STATUS_SUCCESS;
-						break;
+                    case IOCTL_LENCFLTR_TEST_X:
+                        ntStatus = STATUS_SUCCESS;
+                        break;
 
-					case IOCTL_LENCFLTR_TEST_X:
-						ntStatus = STATUS_SUCCESS;
-						break;
+                    case IOCTL_LENCFLTR_BUFFER_REFRESH:
+                        ntStatus = ControlDispatchIoBufferRefresh(DeviceObject, Irp);
+                        break;
 
-					case IOCTL_LENCFLTR_BUFFER_REFRESH:
-						ntStatus = ControlDispatchIoBufferRefresh(DeviceObject, Irp);
-						break;
+                    case IOCTL_LENCFLTR_INTRNAL_STRM_START:
+                        ntStatus = ControlDispatchIoStreamStart(DeviceObject, Irp);
+                        break;
 
-					case IOCTL_LENCFLTR_INTRNAL_STRM_START:
-						ntStatus = ControlDispatchIoStreamStart(DeviceObject, Irp);
-						break;
-
-					case IOCTL_LENCFLTR_INTRNAL_STRM_STOP:
-						ntStatus = ControlDispatchIoStreamStop(DeviceObject, Irp);
-						break;
+                    case IOCTL_LENCFLTR_INTRNAL_STRM_STOP:
+                        ntStatus = ControlDispatchIoStreamStop(DeviceObject, Irp);
+                        break;
 					
-					default:
-						ntStatus = STATUS_INVALID_PARAMETER;
-						break;
-				}
-			}
-
-			default: break;
-		}
-	}
-	else
-	{
-		ASSERTMSG(FALSE, "Requests being sent to a dead device\n");
-		ntStatus = STATUS_DEVICE_REMOVED;
-	}
+                    default:
+                        ntStatus = STATUS_INVALID_PARAMETER;
+                        break;
+                }
+            }
+            
+            default: break;
+        }
+    } else {
+        ASSERTMSG(FALSE, "Requests being sent to a dead device\n");
+        ntStatus = STATUS_DEVICE_REMOVED;
+    }
 	
-	Irp->IoStatus.Status = ntStatus;
-	IoCompleteRequest (Irp, IO_NO_INCREMENT);
-	return ntStatus;
+    Irp->IoStatus.Status = ntStatus;
+    IoCompleteRequest (Irp, IO_NO_INCREMENT);
+    
+    return ntStatus;
 }
 
 #if DBG
 PCHAR PnPMinorFunctionString(UCHAR MinorFunction)
 {
-	switch (MinorFunction)
-	{
-		case IRP_MN_START_DEVICE:					return "IRP_MN_START_DEVICE";
-		case IRP_MN_QUERY_REMOVE_DEVICE:			return "IRP_MN_QUERY_REMOVE_DEVICE";
-		case IRP_MN_REMOVE_DEVICE:					return "IRP_MN_REMOVE_DEVICE";
-		case IRP_MN_CANCEL_REMOVE_DEVICE:			return "IRP_MN_CANCEL_REMOVE_DEVICE";
-		case IRP_MN_STOP_DEVICE:					return "IRP_MN_STOP_DEVICE";
-		case IRP_MN_QUERY_STOP_DEVICE:				return "IRP_MN_QUERY_STOP_DEVICE";
-		case IRP_MN_CANCEL_STOP_DEVICE:				return "IRP_MN_CANCEL_STOP_DEVICE";
-		case IRP_MN_QUERY_DEVICE_RELATIONS:			return "IRP_MN_QUERY_DEVICE_RELATIONS";
-		case IRP_MN_QUERY_INTERFACE:				return "IRP_MN_QUERY_INTERFACE";
-		case IRP_MN_QUERY_CAPABILITIES:				return "IRP_MN_QUERY_CAPABILITIES";
-		case IRP_MN_QUERY_RESOURCES:				return "IRP_MN_QUERY_RESOURCES";
-		case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:	return "IRP_MN_QUERY_RESOURCE_REQUIREMENTS";
-		case IRP_MN_QUERY_DEVICE_TEXT:				return "IRP_MN_QUERY_DEVICE_TEXT";
-		case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:	return "IRP_MN_FILTER_RESOURCE_REQUIREMENTS";
-		case IRP_MN_READ_CONFIG:					return "IRP_MN_READ_CONFIG";
-		case IRP_MN_WRITE_CONFIG:					return "IRP_MN_WRITE_CONFIG";
-		case IRP_MN_EJECT:							return "IRP_MN_EJECT";
-		case IRP_MN_SET_LOCK:						return "IRP_MN_SET_LOCK";
-		case IRP_MN_QUERY_ID:						return "IRP_MN_QUERY_ID";
-		case IRP_MN_QUERY_PNP_DEVICE_STATE:			return "IRP_MN_QUERY_PNP_DEVICE_STATE";
-		case IRP_MN_QUERY_BUS_INFORMATION:			return "IRP_MN_QUERY_BUS_INFORMATION";
-		case IRP_MN_DEVICE_USAGE_NOTIFICATION:		return "IRP_MN_DEVICE_USAGE_NOTIFICATION";
-		case IRP_MN_SURPRISE_REMOVAL:				return "IRP_MN_SURPRISE_REMOVAL";
-		default:									return "UNKNOWN_PNP_IRP";
-	}
+    switch (MinorFunction) {
+        case IRP_MN_START_DEVICE:					return "IRP_MN_START_DEVICE";
+        case IRP_MN_QUERY_REMOVE_DEVICE:			return "IRP_MN_QUERY_REMOVE_DEVICE";
+        case IRP_MN_REMOVE_DEVICE:					return "IRP_MN_REMOVE_DEVICE";
+        case IRP_MN_CANCEL_REMOVE_DEVICE:			return "IRP_MN_CANCEL_REMOVE_DEVICE";
+        case IRP_MN_STOP_DEVICE:					return "IRP_MN_STOP_DEVICE";
+        case IRP_MN_QUERY_STOP_DEVICE:				return "IRP_MN_QUERY_STOP_DEVICE";
+        case IRP_MN_CANCEL_STOP_DEVICE:				return "IRP_MN_CANCEL_STOP_DEVICE";
+        case IRP_MN_QUERY_DEVICE_RELATIONS:			return "IRP_MN_QUERY_DEVICE_RELATIONS";
+        case IRP_MN_QUERY_INTERFACE:				return "IRP_MN_QUERY_INTERFACE";
+        case IRP_MN_QUERY_CAPABILITIES:				return "IRP_MN_QUERY_CAPABILITIES";
+        case IRP_MN_QUERY_RESOURCES:				return "IRP_MN_QUERY_RESOURCES";
+        case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:	return "IRP_MN_QUERY_RESOURCE_REQUIREMENTS";
+        case IRP_MN_QUERY_DEVICE_TEXT:				return "IRP_MN_QUERY_DEVICE_TEXT";
+        case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:	return "IRP_MN_FILTER_RESOURCE_REQUIREMENTS";
+        case IRP_MN_READ_CONFIG:					return "IRP_MN_READ_CONFIG";
+        case IRP_MN_WRITE_CONFIG:					return "IRP_MN_WRITE_CONFIG";
+        case IRP_MN_EJECT:							return "IRP_MN_EJECT";
+        case IRP_MN_SET_LOCK:						return "IRP_MN_SET_LOCK";
+        case IRP_MN_QUERY_ID:						return "IRP_MN_QUERY_ID";
+        case IRP_MN_QUERY_PNP_DEVICE_STATE:			return "IRP_MN_QUERY_PNP_DEVICE_STATE";
+        case IRP_MN_QUERY_BUS_INFORMATION:			return "IRP_MN_QUERY_BUS_INFORMATION";
+        case IRP_MN_DEVICE_USAGE_NOTIFICATION:		return "IRP_MN_DEVICE_USAGE_NOTIFICATION";
+        case IRP_MN_SURPRISE_REMOVAL:				return "IRP_MN_SURPRISE_REMOVAL";
+        default:									return "UNKNOWN_PNP_IRP";
+    }
 }
 #endif
