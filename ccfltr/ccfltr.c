@@ -478,12 +478,11 @@ NTSTATUS ModifyStreamRead(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, PVOID Con
                     L("[%s] Local buffer replaced %d\n", FN, pDeviceExtension->DataUsed);
                 } else {
                     /*
-                    if (pStreamHdr->DataUsed <= pDeviceExtension->DataUsed && Irp->IoStatus.Status == STATUS_SUCCESS)
-					{
-						RtlCopyMemory(pMdlBufferOut, lpStreamBuffer, pDeviceExtension->DataUsed);
-						pStreamHdr->DataUsed = pDeviceExtension->DataUsed;
-					}
-					*/
+                    if (pStreamHdr->DataUsed <= pDeviceExtension->DataUsed && Irp->IoStatus.Status == STATUS_SUCCESS) {
+                        RtlCopyMemory(pMdlBufferOut, lpStreamBuffer, pDeviceExtension->DataUsed);
+                        pStreamHdr->DataUsed = pDeviceExtension->DataUsed;
+                    }
+                    */
 
                     if (Irp->IoStatus.Status == STATUS_SUCCESS) {
                         RtlCopyMemory(pMdlBufferOut, lpStreamBuffer, pDeviceExtension->DataUsed);
@@ -492,7 +491,7 @@ NTSTATUS ModifyStreamRead(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, PVOID Con
                 }
             }
 #else
-			try {
+            try {
                 if (Irp->RequestorMode == UserMode) {
                     ProbeForRead(pStreamHdr->Data, pStreamHdr->DataUsed, sizeof(BYTE));
                 }
@@ -504,21 +503,19 @@ NTSTATUS ModifyStreamRead(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, PVOID Con
                     line = (ULONG)1;
 
 					/*
-					for (itr = (ULONG)0; itr < pStreamHdr->DataUsed; itr++)
-					{
-						line++;
-
-						KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "%02x ", pMdlBufferOut[itr]));
-						
-						if ((line % 32) == 0)
-						{
-							KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "\n"));
-							line = (ULONG)1;
-						}
-					}
-
-					KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "\n"));
-					*/
+                    for (itr = (ULONG)0; itr < pStreamHdr->DataUsed; itr++) {
+                        line++;
+                        
+                        KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "%02x ", pMdlBufferOut[itr]));
+                        
+                        if ((line % 32) == 0) {
+                            KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "\n"));
+                            line = (ULONG)1;
+                        }
+                    }
+                    
+                    KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "\n"));
+                    */
                 }
 
                 if (pStreamHdr->DataUsed != ulBufferSize) {
@@ -543,108 +540,98 @@ NTSTATUS ModifyStreamRead(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, PVOID Con
     return STATUS_CONTINUE_COMPLETION; 
 }
 
-/*
- * Generic wait completion routine.
- */
+/* Generic wait completion routine. */
 NTSTATUS WaitComplete(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PVOID Context)
-{ 
-	UNREFERENCED_PARAMETER(DeviceObject);
-
-	if (Irp->PendingReturned == TRUE)
-	{
-		KeSetEvent((PKEVENT)Context, IO_NO_INCREMENT, FALSE);
-	}
-	
-	return STATUS_MORE_PROCESSING_REQUIRED;  
+{
+    UNREFERENCED_PARAMETER(DeviceObject);
+    
+    if (Irp->PendingReturned == TRUE) {
+        KeSetEvent((PKEVENT)Context, IO_NO_INCREMENT, FALSE);
+    }
+    
+    return STATUS_MORE_PROCESSING_REQUIRED;
 } 
 
 NTSTATUS CustomKsPropertyHandler(IN PIRP Irp, IN PKSIDENTIFIER Request, IN OUT PVOID Data)
 {
-	PIO_STACK_LOCATION pIrpStackLocation;
-	PDEVICE_EXTENSION pFilterExtension;
+    PIO_STACK_LOCATION pIrpStackLocation;
+    PDEVICE_EXTENSION pFilterExtension;
+    
+    pIrpStackLocation = IoGetCurrentIrpStackLocation(Irp);
+    pFilterExtension = (PDEVICE_EXTENSION)pIrpStackLocation->DeviceObject->DeviceExtension;
+    
+    /*
+    if (TRUE == IsEqualGUID(&Request->Set, &GUID_PROPSETID_VidcapCameraControl)) {
+        if (pRequest->Id==KSPROPERTY_CAMERACONTROL_PRIVACY) {
+            KSPROPERTY_CAMERACONTROL_S *CamControl=Irp->UserBuffer;
+            
+            if (pRequest->Flags==KSPROPERTY_TYPE_SET) {
+                DebugPrint(("KSPROPERTY_CAMERACONTROL_PRIVACY Set Value= %x\n",CamControl->Value));
+                // RtlCopyMemory(CamControl,pRequest,sizeof(KSPROPERTY));
+                PrivacyModeFlag=CamControl->Value;
+                Irp->IoStatus.Status=STATUS_SUCCESS;
+            }
+			
+            if (pRequest->Flags==KSPROPERTY_TYPE_GET) {
+                DebugPrint(("KSPROPERTY_CAMERACONTROL_PRIVACY Get Value= %x\n",CamControl->Value));
+                //RtlCopyMemory(CamControl,pRequest,sizeof(KSPROPERTY));
+                CamControl->Value=PrivacyModeFlag;
+                DebugPrint(("KSPROPERTY_CAMERACONTROL_PRIVACY Get Value changed= %x\n",CamControl->Value));
+                Irp->IoStatus.Status=STATUS_SUCCESS;
+            }
 
-	pIrpStackLocation = IoGetCurrentIrpStackLocation(Irp);
-	pFilterExtension = (PDEVICE_EXTENSION)pIrpStackLocation->DeviceObject->DeviceExtension;
+            if (pRequest->Flags==KSPROPERTY_TYPE_SETSUPPORT) {
+                DebugPrint(("KSPROPERTY_TYPE_SETSUPPORT\n"));
+            }
+            
+            if (pRequest->Flags==KSPROPERTY_TYPE_BASICSUPPORT) {
+                DebugPrint(("KSPROPERTY_TYPE_BASICSUPPORT\n"));
+            }
+        }
+    }
+    */
 
-	/*
-	if(TRUE == IsEqualGUID(&Request->Set, &GUID_PROPSETID_VidcapCameraControl))
-	{
-		if(pRequest->Id==KSPROPERTY_CAMERACONTROL_PRIVACY)
-		{
-			KSPROPERTY_CAMERACONTROL_S *CamControl=Irp->UserBuffer;
-			if(pRequest->Flags==KSPROPERTY_TYPE_SET)
-			{
-				DebugPrint(("KSPROPERTY_CAMERACONTROL_PRIVACY Set Value= %x\n",CamControl->Value));
-				//RtlCopyMemory(CamControl,pRequest,sizeof(KSPROPERTY));
-				PrivacyModeFlag=CamControl->Value;
-				Irp->IoStatus.Status=STATUS_SUCCESS;
-			}
-			if(pRequest->Flags==KSPROPERTY_TYPE_GET)
-			{
-				DebugPrint(("KSPROPERTY_CAMERACONTROL_PRIVACY Get Value= %x\n",CamControl->Value));
-				//RtlCopyMemory(CamControl,pRequest,sizeof(KSPROPERTY));
-				CamControl->Value=PrivacyModeFlag;
-				DebugPrint(("KSPROPERTY_CAMERACONTROL_PRIVACY Get Value changed= %x\n",CamControl->Value));
-				Irp->IoStatus.Status=STATUS_SUCCESS;
-			}
+    if (IsEqualGUID(&Request->Set, &GUID_PROPSETID_Connection) == TRUE) {
+        if (Request->Id == KSPROPERTY_CONNECTION_STATE) {
+            PULONG pData = (PULONG)Data;
+            KSSTATE ksState = (KSSTATE)*pData;
+            
+            if (Request->Flags == KSPROPERTY_TYPE_SET) {
+                switch (ksState) {
+                    case KSSTATE_STOP:
+                        InterlockedAnd(&pFilterExtension->KsStateRun, 0);
+                        KeSetEvent(&pFilterExtension->EventCtrl, 0, FALSE);
+                        L("[%s] SET: KSSTATE_STOP\n", FN);
+                        break;
+                    
+                    case KSSTATE_ACQUIRE:
+                        InterlockedAnd(&pFilterExtension->KsStateRun, 0);
+                        KeSetEvent(&pFilterExtension->EventCtrl, 0, FALSE);
+                        L("[%s] SET: KSSTATE_ACQUIRE\n", FN);
+                        break;
+                    
+                    case KSSTATE_PAUSE:
+                        InterlockedAnd(&pFilterExtension->KsStateRun, 0);
+                        KeSetEvent(&pFilterExtension->EventCtrl, 0, FALSE);
+                        L("[%s] SET: KSSTATE_PAUSE\n", FN);
+                        break;
+                    
+                    case KSSTATE_RUN:
+                        InterlockedIncrement(&pFilterExtension->KsStateRun);
+                        KeSetEvent(&pFilterExtension->EventCtrl, 0, FALSE);
+                        L("[%s] SET: KSSTATE_RUN\n", FN);
+                        break;
+                    
+                    default:
+                        break;
+                }
 
-			if(pRequest->Flags==KSPROPERTY_TYPE_SETSUPPORT)
-			{
-				DebugPrint(("KSPROPERTY_TYPE_SETSUPPORT\n"));
-			}
-			if(pRequest->Flags==KSPROPERTY_TYPE_BASICSUPPORT)
-			{
-				DebugPrint(("KSPROPERTY_TYPE_BASICSUPPORT\n"));
-			}
-		}
-	}
-	*/
-
-	if (IsEqualGUID(&Request->Set, &GUID_PROPSETID_Connection) == TRUE)
-	{
-		if (Request->Id == KSPROPERTY_CONNECTION_STATE)
-		{
-			PULONG pData = (PULONG)Data;
-			KSSTATE ksState = (KSSTATE)*pData;
-
-			if (Request->Flags == KSPROPERTY_TYPE_SET)
-			{
-				switch (ksState)
-				{
-					case KSSTATE_STOP:
-						InterlockedAnd(&pFilterExtension->KsStateRun, 0);
-						KeSetEvent(&pFilterExtension->EventCtrl, 0, FALSE);
-						L("[%s] SET: KSSTATE_STOP\n", FN);
-						break;
-
-					case KSSTATE_ACQUIRE:
-						InterlockedAnd(&pFilterExtension->KsStateRun, 0);
-						KeSetEvent(&pFilterExtension->EventCtrl, 0, FALSE);
-						L("[%s] SET: KSSTATE_ACQUIRE\n", FN);
-						break;
-
-					case KSSTATE_PAUSE:
-						InterlockedAnd(&pFilterExtension->KsStateRun, 0);
-						KeSetEvent(&pFilterExtension->EventCtrl, 0, FALSE);
-						L("[%s] SET: KSSTATE_PAUSE\n", FN);
-						break;
-
-					case KSSTATE_RUN:
-						InterlockedIncrement(&pFilterExtension->KsStateRun);
-						KeSetEvent(&pFilterExtension->EventCtrl, 0, FALSE);
-						L("[%s] SET: KSSTATE_RUN\n", FN);
-						break;
-
-					default:
-						break;
-				}
-
-				Irp->IoStatus.Status = STATUS_SUCCESS;
-			}
-		}
-	}
-
-	return STATUS_SUCCESS;
+                Irp->IoStatus.Status = STATUS_SUCCESS;
+            }
+        }
+    }
+    
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS CustomKsMethodHandler(IN PIRP Irp, IN PKSIDENTIFIER Request, IN OUT PVOID Data)
