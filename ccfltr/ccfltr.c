@@ -1237,24 +1237,20 @@ NTSTATUS FilterDispatchPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
  */
 NTSTATUS FilterStartCompletionRoutine(PDEVICE_OBJECT DeviceObject, PIRP Irp, PVOID Context)
 {
-	PKEVENT knEvent = (PKEVENT)Context;
+    PKEVENT knEvent = (PKEVENT)Context;
 
-	UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(DeviceObject);
 
-	/*
-	 * If the lower driver didn't return STATUS_PENDING, we don't need to set the event because we won't be waiting on it. 
-	 * This optimization avoids grabbing the dispatcher lock, and improves perf.
-	 */
-	if (Irp->PendingReturned == TRUE)
-	{
-		KeSetEvent(knEvent, IO_NO_INCREMENT, FALSE);
-	}
-
-	/*
-	 * The dispatch routine will have to call IoCompleteRequest
-	 */
-	return STATUS_MORE_PROCESSING_REQUIRED;
-
+    /*
+     * If the lower driver didn't return STATUS_PENDING, we don't need to set the event because we won't be waiting on it. 
+     * This optimization avoids grabbing the dispatcher lock, and improves perf.
+     */
+    if (Irp->PendingReturned == TRUE) {
+        KeSetEvent(knEvent, IO_NO_INCREMENT, FALSE);
+    }
+    
+    /* The dispatch routine will have to call IoCompleteRequest */
+    return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
 /*
@@ -1264,29 +1260,25 @@ NTSTATUS FilterStartCompletionRoutine(PDEVICE_OBJECT DeviceObject, PIRP Irp, PVO
  */
 NTSTATUS FilterDeviceUsageNotificationCompletionRoutine(PDEVICE_OBJECT DeviceObject, PIRP Irp, PVOID Context)
 {
-	PDEVICE_EXTENSION pDeviceExtension;
+    PDEVICE_EXTENSION pDeviceExtension;
+    
+    UNREFERENCED_PARAMETER(Context);
 
-	UNREFERENCED_PARAMETER(Context);
+    pDeviceExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
 
-	pDeviceExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
+    if (Irp->PendingReturned) {
+        IoMarkIrpPending(Irp);
+    }
 
-	if (Irp->PendingReturned)
-	{
-		IoMarkIrpPending(Irp);
-	}
-
-	/*
-	 * On the way up, pagable might become clear. Mimic the driver below us.
-	 */
-	if (!(pDeviceExtension->NextLowerDriver->Flags & DO_POWER_PAGABLE))
-	{
-		DeviceObject->Flags &= ~DO_POWER_PAGABLE;
-	}
-
-	IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-	InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
-
-	return STATUS_CONTINUE_COMPLETION;
+    /* On the way up, pagable might become clear. Mimic the driver below us. */
+    if (!(pDeviceExtension->NextLowerDriver->Flags & DO_POWER_PAGABLE)) {
+        DeviceObject->Flags &= ~DO_POWER_PAGABLE;
+    }
+    
+    IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+    InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+    
+    return STATUS_CONTINUE_COMPLETION;
 }
 
 /*
@@ -1296,33 +1288,30 @@ NTSTATUS FilterDeviceUsageNotificationCompletionRoutine(PDEVICE_OBJECT DeviceObj
  */
 NTSTATUS FilterDispatchPower(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
-	PDEVICE_EXTENSION pDeviceExtension;
-	NTSTATUS ntStatus;
+    PDEVICE_EXTENSION pDeviceExtension;
+    NTSTATUS ntStatus;
+    
+    pDeviceExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
+    ntStatus = IoAcquireRemoveLock(&pDeviceExtension->RemoveLock, Irp);
 
-	pDeviceExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
-	ntStatus = IoAcquireRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-
-	InterlockedIncrement(&pDeviceExtension->RemoveLockCount);
+    InterlockedIncrement(&pDeviceExtension->RemoveLockCount);
 	
-	if (!NT_SUCCESS(ntStatus))
-	{
-		/*
-		 * Maybe device is being removed.
-		 */
-		Irp->IoStatus.Status = ntStatus;
-		PoStartNextPowerIrp(Irp);
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
-		return ntStatus;
-	}
+    if (!NT_SUCCESS(ntStatus)) {
+        /* Maybe device is being removed. */
+        Irp->IoStatus.Status = ntStatus;
+        PoStartNextPowerIrp(Irp);
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return ntStatus;
+    }
 
-	PoStartNextPowerIrp(Irp);
-	IoSkipCurrentIrpStackLocation(Irp);
-	ntStatus = PoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+    PoStartNextPowerIrp(Irp);
+    IoSkipCurrentIrpStackLocation(Irp);
+    ntStatus = PoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+    
+    IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+    InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
 
-	IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp); 
-	InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
-
-	return ntStatus;
+    return ntStatus;
 }
 
 /*
@@ -1332,121 +1321,102 @@ NTSTATUS FilterDispatchPower(PDEVICE_OBJECT DeviceObject, PIRP Irp)
  */
 VOID FilterUnload(__in PDRIVER_OBJECT DriverObject)
 {
-	PAGED_CODE();
+    PAGED_CODE();
 
-	/*
-	 * The device object(s) should be NULL now (since we unload, all the devices objects associated with this driver must be deleted.
-	 */
-	if (DriverObject->DeviceObject != NULL)
-	{
-		ASSERTMSG("DeviceObject is not deleted ", FALSE);
-	}
+    /* The device object(s) should be NULL now (since we unload, all the devices objects associated with this driver must be deleted. */
+    if (DriverObject->DeviceObject != NULL) {
+        ASSERTMSG("DeviceObject is not deleted ", FALSE);
+    }
 
-	/*
-	 * We should not be unloaded until all the devices we control have been removed from our queue.
-	 */
-	L("[%s] Called\n", FN);
-
-	return;
+    /* We should not be unloaded until all the devices we control have been removed from our queue. */
+    L("[%s] Called\n", FN);
+    
+    return;
 }
 
 NTSTATUS FilterCreateControlObject(__in PDEVICE_OBJECT DeviceObject)
 {
-	UNICODE_STRING ntDeviceName;
-	UNICODE_STRING symbolicLinkName;
-	PDEVICE_OBJECT pCtrlDeviceObject;
-	PCONTROL_DEVICE_EXTENSION pControlExtension;
-	PDEVICE_EXTENSION pFilterExtension;
-	NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
-	UNICODE_STRING sddlString;    
+    UNICODE_STRING ntDeviceName;
+    UNICODE_STRING symbolicLinkName;
+    PDEVICE_OBJECT pCtrlDeviceObject;
+    PCONTROL_DEVICE_EXTENSION pControlExtension;
+    PDEVICE_EXTENSION pFilterExtension;
+    NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
+    UNICODE_STRING sddlString;
 
-	PAGED_CODE();
+    PAGED_CODE();
+    
+    pFilterExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
 
-	pFilterExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
+	/* IoCreateDeviceSecure & IoCreateSymbolicLink must be called at PASSIVE_LEVEL. Hence we use an event and not a fast mutex. */
+    KeEnterCriticalRegion();
+    KeWaitForSingleObject(&pFilterExtension->ControlLock, Executive, KernelMode, FALSE, NULL);
 
-	/*
-	 * IoCreateDeviceSecure & IoCreateSymbolicLink must be called at PASSIVE_LEVEL. Hence we use an event and not a fast mutex.
-	 */
-	KeEnterCriticalRegion();
-	KeWaitForSingleObject(&pFilterExtension->ControlLock, Executive, KernelMode, FALSE, NULL);
+    /* If this is a first instance of the device, then create a control object and register dispatch points to handle ioctls. */
+    if (++pFilterExtension->InstanceCount == 1) {
+        /* Initialize the unicode strings */
+        RtlInitUnicodeString(&ntDeviceName, NTDEVICE_NAME_STRING);
+        RtlInitUnicodeString(&symbolicLinkName, SYMBOLIC_NAME_STRING);
 
-	/*
-	 * If this is a first instance of the device, then create a control object and register dispatch points to handle ioctls.
-	 */
-	if (++pFilterExtension->InstanceCount == 1)
-	{
-		/*
-		 * Initialize the unicode strings
-		 */
-		RtlInitUnicodeString(&ntDeviceName, NTDEVICE_NAME_STRING);
-		RtlInitUnicodeString(&symbolicLinkName, SYMBOLIC_NAME_STRING);
+        /* Initialize a security descriptor string. Refer to SDDL docs in the SDK for more info. */
+        RtlInitUnicodeString( &sddlString, L"D:P(A;;GA;;;SY)(A;;GA;;;BA)");
 
-		/*
-		 * Initialize a security descriptor string. Refer to SDDL docs in the SDK for more info.
-		 */
-		RtlInitUnicodeString( &sddlString, L"D:P(A;;GA;;;SY)(A;;GA;;;BA)");
+        /*
+         * Create a named deviceobject so that applications or drivers can directly talk to us without going throuhg the entire
+         * stack. This call could fail if there are not enough resources or another deviceobject of same name exists (name
+         * collision). Let us use the new IoCreateDeviceSecure and specify a security descriptor (SD) that allows only System
+         * and Admin groups to access the control device. Let us also specify a unique guid to allow administrators to change
+         * the SD if he desires to do so without changing the driver. The SD will be stored in:
+         *
+         *   HKLM\SYSTEM\CCSet\Control\Class\<GUID>\Properties\Security
+         *
+         * An admin can override the SD specified in the below call by modifying the registry.
+         */
+        ntStatus = IoCreateDeviceSecure(DeviceObject->DriverObject,
+                                        sizeof(CONTROL_DEVICE_EXTENSION),
+                                        &ntDeviceName,
+                                        FILE_DEVICE_UNKNOWN,
+                                        FILE_DEVICE_SECURE_OPEN,
+                                        FALSE,
+                                        &sddlString,
+                                        (LPCGUID)&GUID_SD_FILTER_CONTROL_OBJECT,
+                                        &pCtrlDeviceObject);
+        
+        if (NT_SUCCESS(ntStatus)) {
+            L("[%s] ControlDeviceObject created 0x%p\n", FN, pCtrlDeviceObject);
 
-		/*
-		 * Create a named deviceobject so that applications or drivers can directly talk to us without going throuhg the entire
-		 * stack. This call could fail if there are not enough resources or another deviceobject of same name exists (name
-		 * collision). Let us use the new IoCreateDeviceSecure and specify a security descriptor (SD) that allows only System
-		 * and Admin groups to access the control device. Let us also specify a unique guid to allow administrators to change
-		 * the SD if he desires to do so without changing the driver. The SD will be stored in:
-		 *
-		 *   HKLM\SYSTEM\CCSet\Control\Class\<GUID>\Properties\Security
-		 *
-		 * An admin can override the SD specified in the below call by modifying the registry.
-		 */
-		ntStatus = IoCreateDeviceSecure(DeviceObject->DriverObject,
-										sizeof(CONTROL_DEVICE_EXTENSION),
-										&ntDeviceName,
-										FILE_DEVICE_UNKNOWN,
-										FILE_DEVICE_SECURE_OPEN,
-										FALSE,
-										&sddlString,
-										(LPCGUID)&GUID_SD_FILTER_CONTROL_OBJECT,
-										&pCtrlDeviceObject);
+            pCtrlDeviceObject->Flags |= DO_BUFFERED_IO;
+            
+            ntStatus = IoCreateSymbolicLink(&symbolicLinkName, &ntDeviceName);
 
-		if (NT_SUCCESS(ntStatus))
-		{
-			L("[%s] ControlDeviceObject created 0x%p\n", FN, pCtrlDeviceObject);
+            if (!NT_SUCCESS(ntStatus)) {
+                IoDeleteDevice(pCtrlDeviceObject);
+                goto End;
+            }
 
-			pCtrlDeviceObject->Flags |= DO_BUFFERED_IO;
+            pControlExtension = (PCONTROL_DEVICE_EXTENSION)pCtrlDeviceObject->DeviceExtension;
+            pControlExtension->Common.Type = DEVICE_TYPE_CDO;
+            pControlExtension->ControlData = NULL;
+            pControlExtension->Deleted = (ULONG)FALSE;
+            pControlExtension->Self = pCtrlDeviceObject;
+            pControlExtension->FilterExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
+            pFilterExtension->ControlDeviceObject = pCtrlDeviceObject;
+            
+            L("[%s] FilterExtension (From Control): 0x%p\n", FN, pControlExtension->FilterExtension);
+            
+            pCtrlDeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
+        } else {
+            L("[%s] IoCreateDeviceSecure failed: 0x%x\n", FN, ntStatus);
+        }
+    }
 
-			ntStatus = IoCreateSymbolicLink(&symbolicLinkName, &ntDeviceName);
-
-			if (!NT_SUCCESS(ntStatus))
-			{
-				IoDeleteDevice(pCtrlDeviceObject);
-				goto End;
-			}
-
-			pControlExtension = (PCONTROL_DEVICE_EXTENSION)pCtrlDeviceObject->DeviceExtension;
-			pControlExtension->Common.Type = DEVICE_TYPE_CDO;
-			pControlExtension->ControlData = NULL;
-			pControlExtension->Deleted = (ULONG)FALSE;
-			pControlExtension->Self = pCtrlDeviceObject;
-			pControlExtension->FilterExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
-			pFilterExtension->ControlDeviceObject = pCtrlDeviceObject;
-
-			L("[%s] FilterExtension (From Control): 0x%p\n", FN, pControlExtension->FilterExtension);
-
-			pCtrlDeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
-		}
-		else
-		{
-			L("[%s] IoCreateDeviceSecure failed: 0x%x\n", FN, ntStatus);
-		}
-	}
-
-	L("[%s] Control object instance count: %d\n", FN, pFilterExtension->InstanceCount);
-
+    L("[%s] Control object instance count: %d\n", FN, pFilterExtension->InstanceCount);
+    
 End:
-
-	KeSetEvent(&pFilterExtension->ControlLock, IO_NO_INCREMENT, FALSE);
-	KeLeaveCriticalRegion();
-
-	return ntStatus;
+    KeSetEvent(&pFilterExtension->ControlLock, IO_NO_INCREMENT, FALSE);
+    KeLeaveCriticalRegion();
+    
+    return ntStatus;
 }
 
 VOID FilterDeleteControlObject(__in PDEVICE_OBJECT DeviceObject)
