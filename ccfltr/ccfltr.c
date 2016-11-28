@@ -48,8 +48,8 @@ NTSTATUS DriverEntry(__in PDRIVER_OBJECT DriverObject, __in PUNICODE_STRING Regi
 
     /* Create dispatch points. */
     for (ulIndex = (ULONG)0, pfnDriverDispatch = DriverObject->MajorFunction;
-        ulIndex <= IRP_MJ_MAXIMUM_FUNCTION;
-        ulIndex++, pfnDriverDispatch++) {
+            ulIndex <= IRP_MJ_MAXIMUM_FUNCTION;
+            ulIndex++, pfnDriverDispatch++) {
         *pfnDriverDispatch = FilterPass;
     }
 
@@ -636,47 +636,44 @@ NTSTATUS CustomKsPropertyHandler(IN PIRP Irp, IN PKSIDENTIFIER Request, IN OUT P
 
 NTSTATUS CustomKsMethodHandler(IN PIRP Irp, IN PKSIDENTIFIER Request, IN OUT PVOID Data)
 {
-	UNREFERENCED_PARAMETER(Irp);
-	UNREFERENCED_PARAMETER(Request);
-	UNREFERENCED_PARAMETER(Data);
+    UNREFERENCED_PARAMETER(Irp);
+    UNREFERENCED_PARAMETER(Request);
+    UNREFERENCED_PARAMETER(Data);
+    
+    /*
+    L("[%s] Called!\n", FN);
+    
+    if (TRUE == IsEqualGUID( &pRequest->Set,  &GUID_PROPSETID_VidcapCameraControl)) {
+        if (pRequest->Id==KSPROPERTY_CAMERACONTROL_PRIVACY) {
+            KSPROPERTY_CAMERACONTROL_S *CamControl=Irp->UserBuffer;
+            
+            if (pRequest->Flags==KSPROPERTY_TYPE_SET) {
+                DebugPrint(("KSPROPERTY_CAMERACONTROL_PRIVACY Set Value= %x\n",CamControl->Value));
+                //RtlCopyMemory(CamControl,pRequest,sizeof(KSPROPERTY));
+                PrivacyModeFlag=CamControl->Value;
+                Irp->IoStatus.Status=STATUS_SUCCESS;
+            }
+            
+            if (pRequest->Flags==KSPROPERTY_TYPE_GET) {
+                DebugPrint(("KSPROPERTY_CAMERACONTROL_PRIVACY Get Value= %x\n",CamControl->Value));
+                //RtlCopyMemory(CamControl,pRequest,sizeof(KSPROPERTY));
+                CamControl->Value=PrivacyModeFlag;
+                DebugPrint(("KSPROPERTY_CAMERACONTROL_PRIVACY Get Value changed= %x\n",CamControl->Value));
+                Irp->IoStatus.Status=STATUS_SUCCESS;
+            }
 
-	/*
-	L("[%s] Called!\n", FN);
+            if (pRequest->Flags==KSPROPERTY_TYPE_SETSUPPORT) {
+                DebugPrint(("KSPROPERTY_TYPE_SETSUPPORT\n"));
+            }
+            
+            if (pRequest->Flags==KSPROPERTY_TYPE_BASICSUPPORT) {
+                DebugPrint(("KSPROPERTY_TYPE_BASICSUPPORT\n"));
+            }
+        }
+    }
+    */
 
-	if(TRUE == IsEqualGUID( &pRequest->Set,  &GUID_PROPSETID_VidcapCameraControl))
-	{
-		if(pRequest->Id==KSPROPERTY_CAMERACONTROL_PRIVACY)
-		{
-			KSPROPERTY_CAMERACONTROL_S *CamControl=Irp->UserBuffer;
-			if(pRequest->Flags==KSPROPERTY_TYPE_SET)
-			{
-				DebugPrint(("KSPROPERTY_CAMERACONTROL_PRIVACY Set Value= %x\n",CamControl->Value));
-				//RtlCopyMemory(CamControl,pRequest,sizeof(KSPROPERTY));
-				PrivacyModeFlag=CamControl->Value;
-				Irp->IoStatus.Status=STATUS_SUCCESS;
-			}
-			if(pRequest->Flags==KSPROPERTY_TYPE_GET)
-			{
-				DebugPrint(("KSPROPERTY_CAMERACONTROL_PRIVACY Get Value= %x\n",CamControl->Value));
-				//RtlCopyMemory(CamControl,pRequest,sizeof(KSPROPERTY));
-				CamControl->Value=PrivacyModeFlag;
-				DebugPrint(("KSPROPERTY_CAMERACONTROL_PRIVACY Get Value changed= %x\n",CamControl->Value));
-				Irp->IoStatus.Status=STATUS_SUCCESS;
-			}
-
-			if(pRequest->Flags==KSPROPERTY_TYPE_SETSUPPORT)
-			{
-				DebugPrint(("KSPROPERTY_TYPE_SETSUPPORT\n"));
-			}
-			if(pRequest->Flags==KSPROPERTY_TYPE_BASICSUPPORT)
-			{
-				DebugPrint(("KSPROPERTY_TYPE_BASICSUPPORT\n"));
-			}
-		}
-	}
-	*/
-
-	return STATUS_SUCCESS;
+    return STATUS_SUCCESS;
 }
 
 /*
@@ -693,390 +690,344 @@ NTSTATUS CustomKsMethodHandler(IN PIRP Irp, IN PKSIDENTIFIER Request, IN OUT PVO
  */
 NTSTATUS FilterPass(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
-	PDEVICE_EXTENSION pDeviceExtension = NULL;
-	PIO_STACK_LOCATION pIrpStack = NULL;
-	NTSTATUS ntStatus = STATUS_SUCCESS;
-	PKSPIN_CONNECT pConnectDetails = NULL;
-	PKSDATAFORMAT pDataFormat = NULL;
-	PKS_DATAFORMAT_VIDEOINFOHEADER pVideoInfoHeader;
-	PKS_DATAFORMAT_VIDEOINFOHEADER2 pVideoInfoHeader2;
-	LPWSTR pszPinName = GUIDSTR_KSPIN_NAME;
-	ULONG ulStreamStop = (ULONG)0;
-	LPWSTR pszOffset = NULL;
-	KEVENT knEvent;
+    PDEVICE_EXTENSION pDeviceExtension = NULL;
+    PIO_STACK_LOCATION pIrpStack = NULL;
+    NTSTATUS ntStatus = STATUS_SUCCESS;
+    PKSPIN_CONNECT pConnectDetails = NULL;
+    PKSDATAFORMAT pDataFormat = NULL;
+    PKS_DATAFORMAT_VIDEOINFOHEADER pVideoInfoHeader;
+    PKS_DATAFORMAT_VIDEOINFOHEADER2 pVideoInfoHeader2;
+    LPWSTR pszPinName = GUIDSTR_KSPIN_NAME;
+    ULONG ulStreamStop = (ULONG)0;
+    LPWSTR pszOffset = NULL;
+    KEVENT knEvent;
+    
+    KeInitializeEvent(&knEvent, NotificationEvent, FALSE);
+    pDeviceExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
+    ntStatus = IoAcquireRemoveLock(&pDeviceExtension->RemoveLock, Irp);
 
-	KeInitializeEvent(&knEvent, NotificationEvent, FALSE);
+    if (!NT_SUCCESS(ntStatus)) {
+        Irp->IoStatus.Status = ntStatus;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return ntStatus;
+    }
 
-	pDeviceExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;	
-	
-	ntStatus = IoAcquireRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+    InterlockedIncrement(&pDeviceExtension->RemoveLockCount);
 
-	if (!NT_SUCCESS(ntStatus))
-	{
-		Irp->IoStatus.Status = ntStatus;
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
-		return ntStatus;
-	}
+    /* First and foremost, continue only if we support this PDO. Otherwise, just pass through. */
+    if (InterlockedCompareExchange(&pDeviceExtension->IsPdoSupported, MAXLONG, MAXLONG) < 1) {
+        IoSkipCurrentIrpStackLocation(Irp);
+        ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+        
+        IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+        InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+        
+        return ntStatus;
+    }
+    
+    pIrpStack = IoGetCurrentIrpStackLocation(Irp);
 
-	InterlockedIncrement(&pDeviceExtension->RemoveLockCount);
+    /*************************************************************************************************************/
 
-	/*
-	 * First and foremost, continue only if we support this PDO. Otherwise, just pass through.
-	 */
-	if (InterlockedCompareExchange(&pDeviceExtension->IsPdoSupported, MAXLONG, MAXLONG) < 1)
-	{
-		IoSkipCurrentIrpStackLocation(Irp);
-		ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
-		
-		IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-		InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
-
-		return ntStatus;
-	}
-
-	pIrpStack = IoGetCurrentIrpStackLocation(Irp);
-
-	/*************************************************************************************************************/
-
-	if (pIrpStack->MajorFunction == IRP_MJ_CREATE)
-	{
+    if (pIrpStack->MajorFunction == IRP_MJ_CREATE) {
 #pragma warning(disable:4311)
-		LONG lCallerPid = (LONG)PsGetCurrentProcessId();
+        LONG lCallerPid = (LONG)PsGetCurrentProcessId();
 #pragma warning(default:4311)
-		DWORD dwSubType = 0;
-		LONG lActiveX = 0;
-		LONG lActiveY = 0;
+        DWORD dwSubType = 0;
+        LONG lActiveX = 0;
+        LONG lActiveY = 0;
+        
+        L("[%s] IRP_MJ_CREATE: ProcessId: %d\n", FN, lCallerPid);
+        
+        if (pIrpStack->FileObject->FileName.Length) {
+            L("[%s] IRP_MJ_CREATE: FileLen: %d\n", FN, pIrpStack->FileObject->FileName.Length);
+            
+            // if (pIrpStack->FileObject->FileName.Length > 100) KdBreakPoint();
 
-		L("[%s] IRP_MJ_CREATE: ProcessId: %d\n", FN, lCallerPid);
+            /* Check for '\Global...' parameter for our flag. Sequence: 5c 67 6c 6f 62 61 6c. */
 
-		if (pIrpStack->FileObject->FileName.Length)
-		{
-			L("[%s] IRP_MJ_CREATE: FileLen: %d\n", FN, pIrpStack->FileObject->FileName.Length);
+            /* The '{146F1A...' portion of the PIN name. Sequence: 7b 31 34 36 46 31 41. */
+            
+            if (InterlockedCompareExchange(&pDeviceExtension->StreamerPid, MAXLONG, MAXLONG) == lCallerPid) {
+                L("[%s] IRP_MJ_CREATE: This is the internal streamer.\n", FN);
+            } else {
+                LARGE_INTEGER liTimeout;
+                
+                L("[%s] IRP_MJ_CREATE: This is another client. Stop internal streamer.\n", FN);
+                
+                (void)RtlWriteRegistryValue(RTL_REGISTRY_ABSOLUTE,
+                                            REG_INTRNL_STRM,
+                                            L"State",
+                                            REG_DWORD,
+                                            &ulStreamStop,
+                                            sizeof(ULONG));
+                
+                /* Pause a bit (1s). Not a good idea generally, but.... */
+                liTimeout.QuadPart = -1 * 1000000;
+                KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, &liTimeout);
+            }
+        }
+        
+        /* Pass IRP to next lower driver. */
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        IoSetCompletionRoutine(Irp, WaitComplete, &knEvent, TRUE, TRUE, TRUE);
+        ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+        
+        /* Wait for IRP return then regain control. */
+        if (ntStatus == STATUS_PENDING) {
+            KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, NULL);
+        }
+        
+        if (!pIrpStack->FileObject->FileName.Buffer) {
+            L("[%s] IRP_MJ_CREATE: Error STATUS_INVALID_PARAMETER (NullBuff).\n", FN);
+            
+            IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+            InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+            return STATUS_INVALID_PARAMETER;
+        }
 
-			// if (pIrpStack->FileObject->FileName.Length > 100) KdBreakPoint();
-
-			/*
-			 * Check for '\Global...' parameter for our flag. Sequence: 5c 67 6c 6f 62 61 6c.
-			 */
-
-			/*
-			 * The '{146F1A...' portion of the PIN name. Sequence: 7b 31 34 36 46 31 41.
-			 */
-
-			if (InterlockedCompareExchange(&pDeviceExtension->StreamerPid, MAXLONG, MAXLONG) == lCallerPid)
-			{
-				L("[%s] IRP_MJ_CREATE: This is the internal streamer.\n", FN);
-			}
-			else
-			{
-				LARGE_INTEGER liTimeout;
-
-				L("[%s] IRP_MJ_CREATE: This is another client. Stop internal streamer.\n", FN);
-
-				(void)RtlWriteRegistryValue(RTL_REGISTRY_ABSOLUTE,
-											REG_INTRNL_STRM,
-											L"State",
-											REG_DWORD,
-											&ulStreamStop,
-											sizeof(ULONG));
-
-				/*
-				 * Pause a bit (1s). Not a good idea generally, but....
-				 */
-				liTimeout.QuadPart = -1 * 1000000;
-				KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, &liTimeout);
-			}
-		}
-
-		/*
-		 * Pass IRP to next lower driver.
-		 */
-		IoCopyCurrentIrpStackLocationToNext(Irp);
-		IoSetCompletionRoutine(Irp, WaitComplete, &knEvent, TRUE, TRUE, TRUE);
-		ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
-
-		/*
-		 * Wait for IRP return then regain control.
-		 */
-		if (ntStatus == STATUS_PENDING)
-		{
-			KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, NULL);
-		}
-
-		if (!pIrpStack->FileObject->FileName.Buffer)
-		{
-			L("[%s] IRP_MJ_CREATE: Error STATUS_INVALID_PARAMETER (NullBuff).\n", FN);
-
-			IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-			InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+        /* Only check KS_DATAFORMAT_VIDEOINFOHEADER size since KS_DATAFORMAT_VIDEOINFOHEADER2 is bigger than v1. */
+        if (pIrpStack->FileObject->FileName.Length < wcslen(pszPinName) * sizeof(WCHAR) +
+                sizeof(KSPIN_CONNECT) + sizeof(KS_DATAFORMAT_VIDEOINFOHEADER)) {
+            L("[%s] IRP_MJ_CREATE: Error STATUS_INVALID_PARAMETER (NameLen).\n", FN);
+            
+            IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+            InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
 			return STATUS_INVALID_PARAMETER;
-		}
+        }
+        
+        pszOffset = wcsstr(pIrpStack->FileObject->FileName.Buffer, pszPinName);
+        
+        if (!pszOffset) {
+            /* Request is not targeted to a pin. */
+            L("[%s] IRP_MJ_CREATE: Error STATUS_INVALID_PARAMETER (!Offset).\n", FN);
+            
+            IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+            InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+            return STATUS_INVALID_PARAMETER;
+        }
+        
+        pConnectDetails = (PKSPIN_CONNECT)(pszOffset + wcslen(pszPinName));
+        pDataFormat = (PKSDATAFORMAT)((PBYTE)pConnectDetails + sizeof(KSPIN_CONNECT));
+        
+        if (IsEqualGUID(&pDataFormat->Specifier, &GUID_Specifier_VideoInfo) == TRUE) {
+            size_t cbTmpSize = (wcslen(pszPinName) * sizeof(WCHAR))
+                + sizeof(KSPIN_CONNECT)
+                + sizeof(KS_DATAFORMAT_VIDEOINFOHEADER);
+            
+            L("[%s] IRP_MJ_CREATE: Use KS_DATAFORMAT_VIDEOINFOHEADER (Size = %d).\n", FN, cbTmpSize);
+            
+            pVideoInfoHeader = (PKS_DATAFORMAT_VIDEOINFOHEADER)((PBYTE)pConnectDetails + sizeof(KSPIN_CONNECT));
+            
+            if (pVideoInfoHeader) {
+                CHAR c1, c2, c3, c4;
+                DWORD dwComp = pVideoInfoHeader->VideoInfoHeader.bmiHeader.biCompression;
+                FOURCC_DMP(dwComp, &c1, &c2, &c3, &c4);
+                
+                PrintGuidValues(FN, L"IRP_MJ_CREATE: MajorFormat", &pVideoInfoHeader->DataFormat.MajorFormat);
+                PrintGuidValues(FN, L"IRP_MJ_CREATE: SubFormat", &pVideoInfoHeader->DataFormat.SubFormat);
+                PrintGuidValues(FN, L"IRP_MJ_CREATE: Specifier", &pVideoInfoHeader->DataFormat.Specifier);
+                L("[%s] IRP_MJ_CREATE: SampleSize: %d\n", FN, pVideoInfoHeader->DataFormat.SampleSize);
+                L("[%s] IRP_MJ_CREATE: BitCount: %d\n", FN, pVideoInfoHeader->VideoInfoHeader.bmiHeader.biBitCount);
+                L("[%s] IRP_MJ_CREATE: Compr: 0x%x [%c%c%c%c]\n", FN, dwComp, c4, c3, c2, c1);
+                L("[%s] IRP_MJ_CREATE: Width: %d\n", FN, pVideoInfoHeader->VideoInfoHeader.bmiHeader.biWidth);
+                L("[%s] IRP_MJ_CREATE: Height: %d\n", FN, pVideoInfoHeader->VideoInfoHeader.bmiHeader.biHeight);
+                L("[%s] IRP_MJ_CREATE: Size: %d\n", FN, pVideoInfoHeader->VideoInfoHeader.bmiHeader.biSize);
+                L("[%s] IRP_MJ_CREATE: SizeImg: %d\n", FN, pVideoInfoHeader->VideoInfoHeader.bmiHeader.biSizeImage);
+                
+                dwSubType = dwComp;
+                lActiveX = pVideoInfoHeader->VideoInfoHeader.bmiHeader.biWidth;
+                lActiveY = pVideoInfoHeader->VideoInfoHeader.bmiHeader.biHeight;
+            }
+            
+            InterlockedAnd(&pDeviceExtension->IsVideoInfoHeader2, 0);
+            RtlCopyMemory(&pDeviceExtension->VideoInfoHeader, pVideoInfoHeader, sizeof(KS_DATAFORMAT_VIDEOINFOHEADER));
+        } else if (IsEqualGUID(&pDataFormat->Specifier, &GUID_Specifier_VideoInfo2) == TRUE) {
+            size_t cbTmpSize = (wcslen(pszPinName) * sizeof(WCHAR))
+                + sizeof(KSPIN_CONNECT)
+                + sizeof(KS_DATAFORMAT_VIDEOINFOHEADER2);
+            
+            L("[%s] IRP_MJ_CREATE: Use KS_DATAFORMAT_VIDEOINFOHEADER2 (Size = %d).\n", FN, cbTmpSize);
+            
+            pVideoInfoHeader2 = (PKS_DATAFORMAT_VIDEOINFOHEADER2)((PBYTE)pConnectDetails + sizeof(KSPIN_CONNECT));
+            
+            if (pVideoInfoHeader2) {
+                CHAR c1, c2, c3, c4;
+                DWORD dwComp = pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biCompression;
+                FOURCC_DMP(dwComp, &c1, &c2, &c3, &c4);
+                
+                PrintGuidValues(FN, L"IRP_MJ_CREATE: MajorFormat", &pVideoInfoHeader2->DataFormat.MajorFormat);
+                PrintGuidValues(FN, L"IRP_MJ_CREATE: SubFormat", &pVideoInfoHeader2->DataFormat.SubFormat);
+                PrintGuidValues(FN, L"IRP_MJ_CREATE: Specifier", &pVideoInfoHeader2->DataFormat.Specifier);
+                L("[%s] IRP_MJ_CREATE: FormatFlags: 0x%x\n", FN, pVideoInfoHeader2->DataFormat.Flags);
+                L("[%s] IRP_MJ_CREATE: SampleSize: %d\n", FN, pVideoInfoHeader2->DataFormat.SampleSize);
+                L("[%s] IRP_MJ_CREATE: BitCount: %d\n", FN, pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biBitCount);
+                L("[%s] IRP_MJ_CREATE: Compr: 0x%x [%c%c%c%c]\n", FN, dwComp, c4, c3, c2, c1);
+                L("[%s] IRP_MJ_CREATE: Width: %d\n", FN, pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biWidth);
+                L("[%s] IRP_MJ_CREATE: Height: %d\n", FN, pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biHeight);
+                L("[%s] IRP_MJ_CREATE: Size: %d\n", FN, pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biSize);
+                L("[%s] IRP_MJ_CREATE: SizeImg: %d\n", FN, pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biSizeImage);
+                
+                dwSubType = dwComp;
+                lActiveX = pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biWidth;
+                lActiveY = pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biHeight;
+            }
+            
+            InterlockedIncrement(&pDeviceExtension->IsVideoInfoHeader2);
+            RtlCopyMemory(&pDeviceExtension->VideoInfoHeader2, pVideoInfoHeader2, sizeof(KS_DATAFORMAT_VIDEOINFOHEADER2));
+        } else {
+            L("[%s] IRP_MJ_CREATE: I don't know this specifier.\n", FN);
+            InterlockedAnd(&pDeviceExtension->IsVideoInfoHeader2, 0);
+            RtlZeroMemory(&pDeviceExtension->VideoInfoHeader, sizeof(KS_DATAFORMAT_VIDEOINFOHEADER));
+            RtlZeroMemory(&pDeviceExtension->VideoInfoHeader2, sizeof(KS_DATAFORMAT_VIDEOINFOHEADER2));
+        }
 
-		/*
-		 * Only check KS_DATAFORMAT_VIDEOINFOHEADER size since KS_DATAFORMAT_VIDEOINFOHEADER2 is bigger than v1.
-		 */
-		if (pIrpStack->FileObject->FileName.Length < wcslen(pszPinName) * sizeof(WCHAR) +
-			sizeof(KSPIN_CONNECT) + sizeof(KS_DATAFORMAT_VIDEOINFOHEADER))
-		{
-			L("[%s] IRP_MJ_CREATE: Error STATUS_INVALID_PARAMETER (NameLen).\n", FN);
+        (void)RtlWriteRegistryValue(RTL_REGISTRY_ABSOLUTE, REG_FLTR, L"ActiveSubType", REG_DWORD, &dwSubType, sizeof(ULONG));
+        (void)RtlWriteRegistryValue(RTL_REGISTRY_ABSOLUTE, REG_FLTR, L"ActiveResX", REG_DWORD, &lActiveX, sizeof(ULONG));
+        (void)RtlWriteRegistryValue(RTL_REGISTRY_ABSOLUTE, REG_FLTR, L"ActiveResY", REG_DWORD, &lActiveY, sizeof(ULONG));
+        
+        ntStatus = Irp->IoStatus.Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        
+        IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+        InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+        
+        return ntStatus;
+    }
 
-			IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-			InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
-			return STATUS_INVALID_PARAMETER;
-		}
+    /*************************************************************************************************************/
 
-		pszOffset = wcsstr(pIrpStack->FileObject->FileName.Buffer, pszPinName);
+    if ((pIrpStack->MajorFunction == IRP_MJ_DEVICE_CONTROL) &&
+            (pIrpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_KS_READ_STREAM)) {
+        IoMarkIrpPending(Irp);
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        IoSetCompletionRoutine(Irp, ModifyStreamRead, (PVOID)pDeviceExtension, TRUE, TRUE, TRUE);
+        ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+        
+        return STATUS_PENDING;
+    }
+
+    /*************************************************************************************************************/
+
+    /*
+    if ((pIrpStack->MajorFunction == IRP_MJ_DEVICE_CONTROL) &&
+            (pIrpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_KS_WRITE_STREAM)) {
+        // L("[%s] IRP_MJ_DEVICE_CONTROL | IOCTL_KS_READ_STREAM\n", FN);
+        
+        L("[%s] B4_MdlAddr: 0x%p\n", FN, Irp->MdlAddress);
+        L("[%s] B4_UsrBuff: 0x%p\n", FN, Irp->UserBuffer);
+        L("[%s] B4_Method : %d\n", FN, METHOD_FROM_CTL_CODE(IOCTL_KS_WRITE_STREAM));
+        
+        IoMarkIrpPending(Irp);
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        IoSetCompletionRoutine(Irp, ModifyStreamWrite, (PVOID)pDeviceExtension, TRUE, TRUE, TRUE);
+        ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+        
+        return STATUS_PENDING;
+    }
+    */
+
+    /*************************************************************************************************************/
+
+	if ((pIrpStack->MajorFunction == IRP_MJ_DEVICE_CONTROL) &&
+            (pIrpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_KS_PROPERTY)) {
+        // L("[%s] IRP_MJ_DEVICE_CONTROL | IOCTL_KS_PROPERTY\n", FN);
+        
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        IoSetCompletionRoutine(Irp, WaitComplete, &knEvent, TRUE, TRUE, TRUE );
+        ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+        
+        if (ntStatus == STATUS_PENDING) {
+            KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, NULL);
+        }
+        
+        KsDispatchSpecificProperty(Irp, (PFNKSHANDLER)CustomKsPropertyHandler);
+        ntStatus = Irp->IoStatus.Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+        
+        InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+        
+        return ntStatus;
+    }
+
+    /*************************************************************************************************************/
+
+    if ((pIrpStack->MajorFunction == IRP_MJ_DEVICE_CONTROL) &&
+            (pIrpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_KS_METHOD)) {
+        // L("[%s] IRP_MJ_DEVICE_CONTROL | IOCTL_KS_METHOD\n", FN);
+
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        IoSetCompletionRoutine(Irp, WaitComplete, &knEvent, TRUE, TRUE, TRUE );
+        ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+        
+        if (ntStatus == STATUS_PENDING) {
+            KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, NULL);
+        }
+        
+        KsDispatchSpecificMethod(Irp,(PFNKSHANDLER)CustomKsMethodHandler);
+        ntStatus = Irp->IoStatus.Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+        
+        InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+        
+        return ntStatus;
+    }
+
+    /*************************************************************************************************************/
+
+    if (pIrpStack->MajorFunction == IRP_MJ_CLEANUP) {
+        L("[%s] IRP_MJ_CLEANUP: ProcessID: %d\n", FN, PsGetCurrentProcessId());
+
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        IoSetCompletionRoutine(Irp, WaitComplete, &knEvent, TRUE, TRUE, TRUE );
+        ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+        
+        if (ntStatus == STATUS_PENDING) {
+            KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, NULL);
+        }
+
+        ntStatus = Irp->IoStatus.Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+        
+        InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+        
+        return ntStatus;
+    }
+
+    /*************************************************************************************************************/
+
+    if (pIrpStack->MajorFunction == IRP_MJ_CLOSE) {
+        L("[%s] IRP_MJ_CLOSE:\n", FN);
+
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        IoSetCompletionRoutine(Irp, WaitComplete, &knEvent, TRUE, TRUE, TRUE );
+        ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
 		
-		if (!pszOffset)
-		{
-			/*
-			 * Request is not targeted to a pin.
-			 */
-			L("[%s] IRP_MJ_CREATE: Error STATUS_INVALID_PARAMETER (!Offset).\n", FN);
+        if (ntStatus == STATUS_PENDING) {
+            KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, NULL);
+        }
 
-			IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-			InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
-			return STATUS_INVALID_PARAMETER;
-		}
+        ntStatus = Irp->IoStatus.Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+        
+        InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+        
+        return ntStatus;
+    }
 
-		pConnectDetails = (PKSPIN_CONNECT)(pszOffset + wcslen(pszPinName));
-		pDataFormat = (PKSDATAFORMAT)((PBYTE)pConnectDetails + sizeof(KSPIN_CONNECT));
+    /*************************************************************************************************************/
 
-		if (IsEqualGUID(&pDataFormat->Specifier, &GUID_Specifier_VideoInfo) == TRUE)
-		{
-			size_t cbTmpSize = (wcslen(pszPinName) * sizeof(WCHAR))
-				+ sizeof(KSPIN_CONNECT)
-				+ sizeof(KS_DATAFORMAT_VIDEOINFOHEADER);
-			
-			L("[%s] IRP_MJ_CREATE: Use KS_DATAFORMAT_VIDEOINFOHEADER (Size = %d).\n", FN, cbTmpSize);
-
-			pVideoInfoHeader = (PKS_DATAFORMAT_VIDEOINFOHEADER)((PBYTE)pConnectDetails + sizeof(KSPIN_CONNECT));
-
-			if (pVideoInfoHeader)
-			{
-				CHAR c1, c2, c3, c4;
-				DWORD dwComp = pVideoInfoHeader->VideoInfoHeader.bmiHeader.biCompression;
-				FOURCC_DMP(dwComp, &c1, &c2, &c3, &c4);
-
-				PrintGuidValues(FN, L"IRP_MJ_CREATE: MajorFormat", &pVideoInfoHeader->DataFormat.MajorFormat);
-				PrintGuidValues(FN, L"IRP_MJ_CREATE: SubFormat", &pVideoInfoHeader->DataFormat.SubFormat);
-				PrintGuidValues(FN, L"IRP_MJ_CREATE: Specifier", &pVideoInfoHeader->DataFormat.Specifier);
-				L("[%s] IRP_MJ_CREATE: SampleSize: %d\n", FN, pVideoInfoHeader->DataFormat.SampleSize);
-				L("[%s] IRP_MJ_CREATE: BitCount: %d\n", FN, pVideoInfoHeader->VideoInfoHeader.bmiHeader.biBitCount);
-				L("[%s] IRP_MJ_CREATE: Compr: 0x%x [%c%c%c%c]\n", FN, dwComp, c4, c3, c2, c1);
-				L("[%s] IRP_MJ_CREATE: Width: %d\n", FN, pVideoInfoHeader->VideoInfoHeader.bmiHeader.biWidth);
-				L("[%s] IRP_MJ_CREATE: Height: %d\n", FN, pVideoInfoHeader->VideoInfoHeader.bmiHeader.biHeight);
-				L("[%s] IRP_MJ_CREATE: Size: %d\n", FN, pVideoInfoHeader->VideoInfoHeader.bmiHeader.biSize);
-				L("[%s] IRP_MJ_CREATE: SizeImg: %d\n", FN, pVideoInfoHeader->VideoInfoHeader.bmiHeader.biSizeImage);
-
-				dwSubType = dwComp;
-				lActiveX = pVideoInfoHeader->VideoInfoHeader.bmiHeader.biWidth;
-				lActiveY = pVideoInfoHeader->VideoInfoHeader.bmiHeader.biHeight;
-			}
-
-			InterlockedAnd(&pDeviceExtension->IsVideoInfoHeader2, 0);
-			RtlCopyMemory(&pDeviceExtension->VideoInfoHeader, pVideoInfoHeader, sizeof(KS_DATAFORMAT_VIDEOINFOHEADER));
-		}
-		else if (IsEqualGUID(&pDataFormat->Specifier, &GUID_Specifier_VideoInfo2) == TRUE)
-		{
-			size_t cbTmpSize = (wcslen(pszPinName) * sizeof(WCHAR))
-				+ sizeof(KSPIN_CONNECT)
-				+ sizeof(KS_DATAFORMAT_VIDEOINFOHEADER2);
-
-			L("[%s] IRP_MJ_CREATE: Use KS_DATAFORMAT_VIDEOINFOHEADER2 (Size = %d).\n", FN, cbTmpSize);
-
-			pVideoInfoHeader2 = (PKS_DATAFORMAT_VIDEOINFOHEADER2)((PBYTE)pConnectDetails + sizeof(KSPIN_CONNECT));
-
-			if (pVideoInfoHeader2)
-			{
-				CHAR c1, c2, c3, c4;
-				DWORD dwComp = pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biCompression;
-				FOURCC_DMP(dwComp, &c1, &c2, &c3, &c4);
-
-				PrintGuidValues(FN, L"IRP_MJ_CREATE: MajorFormat", &pVideoInfoHeader2->DataFormat.MajorFormat);
-				PrintGuidValues(FN, L"IRP_MJ_CREATE: SubFormat", &pVideoInfoHeader2->DataFormat.SubFormat);
-				PrintGuidValues(FN, L"IRP_MJ_CREATE: Specifier", &pVideoInfoHeader2->DataFormat.Specifier);
-				L("[%s] IRP_MJ_CREATE: FormatFlags: 0x%x\n", FN, pVideoInfoHeader2->DataFormat.Flags);
-				L("[%s] IRP_MJ_CREATE: SampleSize: %d\n", FN, pVideoInfoHeader2->DataFormat.SampleSize);
-				L("[%s] IRP_MJ_CREATE: BitCount: %d\n", FN, pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biBitCount);
-				L("[%s] IRP_MJ_CREATE: Compr: 0x%x [%c%c%c%c]\n", FN, dwComp, c4, c3, c2, c1);
-				L("[%s] IRP_MJ_CREATE: Width: %d\n", FN, pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biWidth);
-				L("[%s] IRP_MJ_CREATE: Height: %d\n", FN, pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biHeight);
-				L("[%s] IRP_MJ_CREATE: Size: %d\n", FN, pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biSize);
-				L("[%s] IRP_MJ_CREATE: SizeImg: %d\n", FN, pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biSizeImage);
-
-				dwSubType = dwComp;
-				lActiveX = pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biWidth;
-				lActiveY = pVideoInfoHeader2->VideoInfoHeader2.bmiHeader.biHeight;
-			}
-
-			InterlockedIncrement(&pDeviceExtension->IsVideoInfoHeader2);
-			RtlCopyMemory(&pDeviceExtension->VideoInfoHeader2, pVideoInfoHeader2, sizeof(KS_DATAFORMAT_VIDEOINFOHEADER2));
-		}
-		else
-		{
-			L("[%s] IRP_MJ_CREATE: I don't know this specifier.\n", FN);
-			InterlockedAnd(&pDeviceExtension->IsVideoInfoHeader2, 0);
-			RtlZeroMemory(&pDeviceExtension->VideoInfoHeader, sizeof(KS_DATAFORMAT_VIDEOINFOHEADER));
-			RtlZeroMemory(&pDeviceExtension->VideoInfoHeader2, sizeof(KS_DATAFORMAT_VIDEOINFOHEADER2));
-		}
-
-		(void)RtlWriteRegistryValue(RTL_REGISTRY_ABSOLUTE, REG_FLTR, L"ActiveSubType", REG_DWORD, &dwSubType, sizeof(ULONG));
-		(void)RtlWriteRegistryValue(RTL_REGISTRY_ABSOLUTE, REG_FLTR, L"ActiveResX", REG_DWORD, &lActiveX, sizeof(ULONG));
-		(void)RtlWriteRegistryValue(RTL_REGISTRY_ABSOLUTE, REG_FLTR, L"ActiveResY", REG_DWORD, &lActiveY, sizeof(ULONG));
-
-		ntStatus = Irp->IoStatus.Status;
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-		IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-		InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
-		
-		return ntStatus;
-	}
-
-	/*************************************************************************************************************/
-
-	if ((pIrpStack->MajorFunction == IRP_MJ_DEVICE_CONTROL) && 
-		(pIrpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_KS_READ_STREAM))
-	{
-		IoMarkIrpPending(Irp);
-		IoCopyCurrentIrpStackLocationToNext(Irp);
-		IoSetCompletionRoutine(Irp, ModifyStreamRead, (PVOID)pDeviceExtension, TRUE, TRUE, TRUE);
-		ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
-		
-		return STATUS_PENDING;
-	}
-
-	/*************************************************************************************************************/
-
-	/*
-	if ((pIrpStack->MajorFunction == IRP_MJ_DEVICE_CONTROL) && 
-		(pIrpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_KS_WRITE_STREAM))
-	{
-		// L("[%s] IRP_MJ_DEVICE_CONTROL | IOCTL_KS_READ_STREAM\n", FN);
-
-		L("[%s] B4_MdlAddr: 0x%p\n", FN, Irp->MdlAddress);
-		L("[%s] B4_UsrBuff: 0x%p\n", FN, Irp->UserBuffer);
-		L("[%s] B4_Method : %d\n", FN, METHOD_FROM_CTL_CODE(IOCTL_KS_WRITE_STREAM));
-
-		IoMarkIrpPending(Irp);
-		IoCopyCurrentIrpStackLocationToNext(Irp);
-		IoSetCompletionRoutine(Irp, ModifyStreamWrite, (PVOID)pDeviceExtension, TRUE, TRUE, TRUE);
-		ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
-		
-		return STATUS_PENDING;
-	}
-	*/
-
-	/*************************************************************************************************************/
-
-	if ((pIrpStack->MajorFunction == IRP_MJ_DEVICE_CONTROL) && 
-		(pIrpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_KS_PROPERTY))
-	{
-		// L("[%s] IRP_MJ_DEVICE_CONTROL | IOCTL_KS_PROPERTY\n", FN);
-
-		IoCopyCurrentIrpStackLocationToNext(Irp);
-		IoSetCompletionRoutine(Irp, WaitComplete, &knEvent, TRUE, TRUE, TRUE );
-		ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
-		
-		if (ntStatus == STATUS_PENDING)
-		{
-			KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, NULL);
-		}
-
-		KsDispatchSpecificProperty(Irp, (PFNKSHANDLER)CustomKsPropertyHandler);
-		ntStatus = Irp->IoStatus.Status;
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
-		IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-		
-		InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
-
-		return ntStatus;
-	}
-
-	/*************************************************************************************************************/
-
-	if ((pIrpStack->MajorFunction == IRP_MJ_DEVICE_CONTROL) && 
-		(pIrpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_KS_METHOD))
-	{
-		// L("[%s] IRP_MJ_DEVICE_CONTROL | IOCTL_KS_METHOD\n", FN);
-
-		IoCopyCurrentIrpStackLocationToNext(Irp);
-		IoSetCompletionRoutine(Irp, WaitComplete, &knEvent, TRUE, TRUE, TRUE );
-		ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
-		
-		if (ntStatus == STATUS_PENDING)
-		{
-			KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, NULL);
-		}
-		
-		KsDispatchSpecificMethod(Irp,(PFNKSHANDLER)CustomKsMethodHandler);
-		ntStatus = Irp->IoStatus.Status;
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
-		IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-		
-		InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
-
-		return ntStatus;
-	}
-
-	/*************************************************************************************************************/
-
-	if (pIrpStack->MajorFunction == IRP_MJ_CLEANUP)
-	{
-		L("[%s] IRP_MJ_CLEANUP: ProcessID: %d\n", FN, PsGetCurrentProcessId());
-
-		IoCopyCurrentIrpStackLocationToNext(Irp);
-		IoSetCompletionRoutine(Irp, WaitComplete, &knEvent, TRUE, TRUE, TRUE );
-		ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
-		
-		if (ntStatus == STATUS_PENDING)
-		{
-			KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, NULL);
-		}
-
-		ntStatus = Irp->IoStatus.Status;
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
-		IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-
-		InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
-		
-		return ntStatus;
-	}
-
-	/*************************************************************************************************************/
-
-	if (pIrpStack->MajorFunction == IRP_MJ_CLOSE)
-	{
-		L("[%s] IRP_MJ_CLOSE:\n", FN);
-
-		IoCopyCurrentIrpStackLocationToNext(Irp);
-		IoSetCompletionRoutine(Irp, WaitComplete, &knEvent, TRUE, TRUE, TRUE );
-		ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
-		
-		if (ntStatus == STATUS_PENDING)
-		{
-			KeWaitForSingleObject(&knEvent, Executive, KernelMode, FALSE, NULL);
-		}
-
-		ntStatus = Irp->IoStatus.Status;
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
-		IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-
-		InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
-
-		return ntStatus;
-	}
-
-	/*************************************************************************************************************/
-
-	IoSkipCurrentIrpStackLocation(Irp);
-	ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
-	IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
-
-	InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
-
-	return ntStatus;
+    IoSkipCurrentIrpStackLocation(Irp);
+    ntStatus = IoCallDriver(pDeviceExtension->NextLowerDriver, Irp);
+    IoReleaseRemoveLock(&pDeviceExtension->RemoveLock, Irp);
+    
+    InterlockedDecrement(&pDeviceExtension->RemoveLockCount);
+    
+    return ntStatus;
 }
 
 /*
