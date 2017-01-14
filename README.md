@@ -1,3 +1,5 @@
+[![Build status](https://ci.appveyor.com/api/projects/status/ldqswni016jufm6p/branch/master?svg=true)](https://ci.appveyor.com/project/flowerinthenight/windows-camera-class-filter-driver/branch/master)
+
 # Camera class filter driver for Windows
 
 Camera class filter driver for Windows.
