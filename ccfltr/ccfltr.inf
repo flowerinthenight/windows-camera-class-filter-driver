@@ -7,7 +7,7 @@ Signature = "$WINDOWS NT$"
 Class = Image
 ClassGuid = {6BDD1FC6-810F-11D0-BEC7-08002BE2092F} 
 Provider = %ccfltr.Provider%
-DriverVer = 10/21/2015, 1.0.0.1
+DriverVer = 01/10/2017, 1.0.0.1
 CatalogFile = ccfltr.cat
 
 [DestinationDirs]
