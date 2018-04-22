@@ -18,7 +18,7 @@ bcdedit /set testsigning on
 ```
 
 ## Driver setup
-Use the [ccfltr-console](https://github.com/flowerinthenight/windows-camera-class-filter-driver/tree/master/ccfltr-console) tool to install/uninstall the driver. Copy the tool to the directory of the .sys and .inf file.
+Use the [ccfltr-console](https://github.com/flowerinthenight/windows-camera-class-filter-driver/tree/master/ccfltr-console) tool to install/uninstall the driver. It handles the setup in relation to `kthunk.sys`, if available. Copy the tool to the directory of the .sys and .inf file.
 
 ### Installation
 ```
