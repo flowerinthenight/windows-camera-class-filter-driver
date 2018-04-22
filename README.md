@@ -1,8 +1,10 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/ldqswni016jufm6p/branch/master?svg=true)](https://ci.appveyor.com/project/flowerinthenight/windows-camera-class-filter-driver/branch/master)
 
-# Camera class filter driver for Windows
+## Overview
 
-Camera class filter driver for Windows.
+**Disclaimer:** This driver code was intended to be for POC only and was never released to production. If you're looking at the codes, you probably know that this type of driver is generally undocumented and some bits are achieved using reverse engineering.
+
+This driver was tested (though not extensively; it failed on HLK) on Windows 7, 8 and 10 (2015 release) using the ThinkPad X and T series (2015 and older) on both proprietary camera drivers and Microsoft's default UVC driver. 
 
 ## Generate catalog (.cat) file from package
 ```
@@ -28,6 +30,6 @@ ccfltr-console.exe /install
 ccfltr-console.exe /uninstall
 ```
 
-# License
+## License
 
 [The MIT License](./LICENSE.md)
