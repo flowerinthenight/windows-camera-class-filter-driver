@@ -625,8 +625,6 @@ NTSTATUS CustomKsPropertyHandler(IN PIRP Irp, IN PKSIDENTIFIER Request, IN OUT P
                     default:
                         break;
                 }
-
-                Irp->IoStatus.Status = STATUS_SUCCESS;
             }
         }
     }
