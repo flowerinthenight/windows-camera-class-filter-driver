@@ -492,10 +492,6 @@ NTSTATUS ModifyStreamRead(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, PVOID Con
             }
 #else
             try {
-                if (Irp->RequestorMode == UserMode) {
-                    ProbeForRead(pStreamHdr->Data, pStreamHdr->DataUsed, sizeof(BYTE));
-                }
-                
                 if (Irp->IoStatus.Status == STATUS_SUCCESS) {
                     RtlCopyMemory(lpStreamBuffer, pMdlBufferOut, pStreamHdr->DataUsed);
                     pDeviceExtension->DataUsed = pStreamHdr->DataUsed;
