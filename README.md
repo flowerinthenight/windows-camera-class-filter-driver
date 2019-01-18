@@ -31,7 +31,3 @@ ccfltr-console.exe /install
 ```
 ccfltr-console.exe /uninstall
 ```
-
-## License
-
-[The MIT License](./LICENSE.md)
