@@ -94,7 +94,7 @@ NTSTATUS FilterAddDevice(__in PDRIVER_OBJECT DriverObject, __in PDEVICE_OBJECT P
     PAGED_CODE();
 
     /* IoIsWdmVersionAvailable(1, 0x20) returns TRUE on os after Windows 2000. */
-    if (RtlIsNtDdiVersionAvailable(NTDDI_WINXP)) {
+    if (!RtlIsNtDdiVersionAvailable(NTDDI_WINXP)) {
         /*
          * Win2K system bugchecks if the filter attached to a storage device doesn't specify the same DeviceType as the device it's
          * attaching to. This bugcheck happens in the filesystem when you disable the devicestack whose top level deviceobject
