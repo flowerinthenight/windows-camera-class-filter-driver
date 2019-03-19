@@ -163,7 +163,7 @@ DRIVER_UNLOAD FilterUnload;
 IO_COMPLETION_ROUTINE FilterDeviceUsageNotificationCompletionRoutine;
 IO_COMPLETION_ROUTINE FilterStartCompletionRoutine;
 IO_COMPLETION_ROUTINE WaitComplete;
-IO_COMPLETION_ROUTINE ModifyStream;
+IO_COMPLETION_ROUTINE ModifyStreamRead;
 
 PCHAR PnPMinorFunctionString(UCHAR MinorFunction);
 
