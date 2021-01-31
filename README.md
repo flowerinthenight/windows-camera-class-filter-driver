@@ -6,7 +6,9 @@
 
 This filter driver stores a copy of the stream buffer in a shared memory named `\\BaseNamedObjects\\{9E2288A3-7955-428F-9064-9C05C0EDC608}`. This buffer can then be streamed from userland.
 
-This driver was tested (though not extensively; it failed on HLK) on Windows 7, 8 and 10 (2015 release) using the ThinkPad X and T series (2015 and older) on both proprietary camera drivers and Microsoft's default UVC driver. 
+This driver was tested (though not extensively; it failed on HLK) on Windows 7, 8 and 10 (2015 release) using the ThinkPad X and T series (2015 and older) on both proprietary camera drivers and Microsoft's default UVC driver.
+
+There's a good article [here](https://www.virusbulletin.com/virusbulletin/2018/09/through-looking-glass-webcam-interception-and-protection-kernel-mode/) that explains in detail how this works.
 
 ## Generate catalog (.cat) file from package
 ```
