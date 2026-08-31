@@ -1,3 +1,5 @@
+
+
 [![Build status](https://ci.appveyor.com/api/projects/status/ldqswni016jufm6p/branch/master?svg=true)](https://ci.appveyor.com/project/flowerinthenight/windows-camera-class-filter-driver/branch/master)
 
 > [!CAUTION]
@@ -23,7 +25,7 @@ bcdedit /set testsigning on
 ```
 
 ## Driver setup
-Use the [ccfltr-console](https://github.com/flowerinthenight/windows-camera-class-filter-driver/tree/master/ccfltr-console) tool to install/uninstall the driver. It handles the setup in relation to `ksthunk.sys`, if available. Copy the tool to the directory of the .sys and .inf file.
+Use the [ccfltr-console](https://github.com/flowerinthenight/windows-camera-class-filter-driver/tree/master/ccfltr-console) tool to install/uninstall the driver. It handles the setup in relation to `ksthunk.sys`, if available. Copy the tool to the directory of the .sys and .inf file. Run the command from an elevated command prompt.
 
 ### Installation
 ```
